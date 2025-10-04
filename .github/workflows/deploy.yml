@@ -3,7 +3,6 @@ on:
     branches:
       - prod
 
-
 jobs:
   deploy:
     if: |
