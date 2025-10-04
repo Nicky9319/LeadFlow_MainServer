@@ -15,7 +15,7 @@ sudo -S mkdir -p $TARGET_DIR
 sudo -S cp -r ./* $TARGET_DIR/
 
 # Change ownership (optional, but safer if other services access this folder)
-sudo -S chown -R paarth:paarth $TARGET_DIR
+sudo -S chown -R azureuser:azureuser $TARGET_DIR
 
 # Move into the target directory
 cd $TARGET_DIR
