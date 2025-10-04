@@ -1,5 +1,5 @@
 import asyncio
-from fastapi import FastAPI, Response, Request, HTTPException
+from fastapi import FastAPI, Response, Request, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -65,8 +65,17 @@ class HTTP_SERVER():
         # -------------------------
         @self.app.post("/api/mongodb-service/buckets/add-bucket")
         async def add_bucket(
-            bucket_name: str,
+            request: Request,
+            bucket_name: str | None = None,
         ):
+            # allow bucket_name via query param or JSON body {"bucket_name": "..."} or {"bucketName": "..."}
+            if not bucket_name:
+                try:
+                    body = await request.json()
+                    bucket_name = body.get("bucket_name") or body.get("bucketName")
+                except Exception:
+                    bucket_name = None
+
             # create a new bucket with a generated bucketId
             if not bucket_name or not bucket_name.strip():
                 raise HTTPException(status_code=400, detail="bucket_name is required")
@@ -77,6 +86,11 @@ class HTTP_SERVER():
                 self.buckets_collection.insert_one(doc)
             except DuplicateKeyError:
                 raise HTTPException(status_code=409, detail="Bucket with this id already exists")
+
+            # remove any MongoDB-generated _id (ObjectId) before returning
+            if "_id" in doc:
+                doc.pop("_id")
+
             return JSONResponse(status_code=201, content={"message": "Bucket created", "bucket": doc})
 
         @self.app.delete("/api/mongodb-service/buckets/delete-bucket")
@@ -102,9 +116,19 @@ class HTTP_SERVER():
 
         @self.app.put("/api/mongodb-service/buckets/update-bucket-name")
         async def update_bucket_name(
-            bucket_id: str,
-            bucket_name: str,
+            request: Request,
+            bucket_id: str | None = None,
+            bucket_name: str | None = None,
         ):
+            # allow values via query params or JSON body
+            if not bucket_id or not bucket_name:
+                try:
+                    body = await request.json()
+                    bucket_id = bucket_id or body.get("bucket_id") or body.get("bucketId")
+                    bucket_name = bucket_name or body.get("bucket_name") or body.get("bucketName")
+                except Exception:
+                    pass
+
             if not bucket_id or not bucket_name:
                 raise HTTPException(status_code=400, detail="bucket_id and bucket_name are required")
 
@@ -140,14 +164,28 @@ class HTTP_SERVER():
 
         @self.app.post("/api/mongodb-service/leads/add-lead")
         async def add_lead(
-            url: str,
-            username: str = None,
-            platform: str = None,
+            request: Request,
+            url: str | None = None,
+            username: str | None = None,
+            platform: str | None = None,
             status: str = "new",
-            bucket_id: str = None,
+            bucket_id: str | None = None,
             notes : str = "",
         ):
             # basic validation
+            # accept body JSON if some params not provided as query params
+            if not url or not bucket_id:
+                try:
+                    body = await request.json()
+                    url = url or body.get("url")
+                    username = username or body.get("username")
+                    platform = platform or body.get("platform")
+                    status = status or body.get("status")
+                    bucket_id = bucket_id or body.get("bucket_id") or body.get("bucketId")
+                    notes = notes or body.get("notes")
+                except Exception:
+                    pass
+
             if not url:
                 raise HTTPException(status_code=400, detail="url is required")
 
@@ -184,16 +222,32 @@ class HTTP_SERVER():
             except DuplicateKeyError:
                 raise HTTPException(status_code=409, detail="Lead with this id already exists")
 
-            # convert createdAt for response
+            # prepare response and ensure no ObjectId remains
             resp = dict(doc)
+            if "_id" in resp:
+                # convert to string to be safe
+                try:
+                    resp["_id"] = str(resp["_id"])
+                except Exception:
+                    resp.pop("_id", None)
             resp["createdAt"] = created_at.isoformat()
             return JSONResponse(status_code=201, content={"message": "Lead created", "lead": resp})
 
         @self.app.put("/api/mongodb-service/leads/update-lead-status")
         async def update_lead_status(
-            lead_id: str,
-            status: str,
+            request: Request,
+            lead_id: str | None = None,
+            status: str | None = None,
         ):
+            # accept via query params or JSON body
+            if not lead_id or not status:
+                try:
+                    body = await request.json()
+                    lead_id = lead_id or body.get("lead_id") or body.get("leadId")
+                    status = status or body.get("status")
+                except Exception:
+                    pass
+
             if not lead_id or not status:
                 raise HTTPException(status_code=400, detail="lead_id and status are required")
 
@@ -209,9 +263,19 @@ class HTTP_SERVER():
 
         @self.app.put("/api/mongodb-service/leads/update-lead-notes")
         async def update_lead_notes(
-            lead_id: str,
-            notes: str,
+            request: Request,
+            lead_id: str | None = None,
+            notes: str | None = None,
         ):
+            # accept via query or body
+            if not lead_id or notes is None:
+                try:
+                    body = await request.json()
+                    lead_id = lead_id or body.get("lead_id") or body.get("leadId")
+                    notes = notes or body.get("notes")
+                except Exception:
+                    pass
+
             if not lead_id:
                 raise HTTPException(status_code=400, detail="lead_id is required")
 
