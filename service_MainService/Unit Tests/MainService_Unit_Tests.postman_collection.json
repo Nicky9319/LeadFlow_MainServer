@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "MainService Unit Tests",
-    "_postman_id": "f9c3a0d2-0000-4000-8000-000000000000",
+    "_postman_id": "f9c3a0d2-0000-4000-8000-000000000001",
     "description": "Collection for testing main service endpoints (proxy to MongoDB service).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
@@ -66,7 +66,7 @@
       "response": []
     },
     {
-      "name": "Add Lead (multipart/form-data with image)",
+      "name": "Add Lead (upload image only)",
       "request": {
         "method": "POST",
         "header": [],
@@ -78,37 +78,6 @@
               "type": "file",
               "src": "",
               "description": "Select a file to upload (Postman will prompt to choose file)"
-            },
-            {
-              "key": "url",
-              "value": "http://example.com/profile",
-              "type": "text"
-            },
-            {
-              "key": "username",
-              "value": "testuser",
-              "type": "text"
-            },
-            {
-              "key": "platform",
-              "value": "instagram",
-              "type": "text"
-            },
-            {
-              "key": "status",
-              "value": "new",
-              "type": "text"
-            },
-            {
-              "key": "bucket_id",
-              "value": "",
-              "type": "text",
-              "description": "Set an existing bucket_id created earlier"
-            },
-            {
-              "key": "notes",
-              "value": "Sample lead created via Postman",
-              "type": "text"
             }
           ]
         },
