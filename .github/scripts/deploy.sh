@@ -31,7 +31,7 @@ sudo python3.12 -m venv .venv
 source .venv/bin/activate
 
 # Define environmental variables
-pip install -r requirements.txt
+sudo pip install -r requirements.txt
 
 # Ensure .env file exists and add a value
 touch .env
