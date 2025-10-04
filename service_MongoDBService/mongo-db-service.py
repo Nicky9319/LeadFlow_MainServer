@@ -22,6 +22,15 @@ from pymongo.server_api import ServerApi
 from pymongo.errors import DuplicateKeyError
 
 
+STANDARD_LEAD_STATUSES: list[str] = [
+    "Cold Message",
+    "First Follow Up",
+    "Second Follow Up",
+    "Meeting",
+    "Closed",
+]
+
+
 
 class HTTP_SERVER():
     def __init__(self, httpServerHost, httpServerPort, httpServerPrivilegedIpAddress=["127.0.0.1"], data_class_instance=None):
@@ -181,7 +190,7 @@ class HTTP_SERVER():
             url: str | None = None,
             username: str | None = None,
             platform: str | None = None,
-            status: str = "new",
+            status: str | None = None,
             bucket_id: str | None = None,
             notes : str = "",
         ):
@@ -206,17 +215,20 @@ class HTTP_SERVER():
                 raise HTTPException(status_code=400, detail="bucket_id is required and must reference an existing bucket")
 
             # normalize required fields to comply with schema
-            username = username or ""
-            platform = platform or ""
+            username = (username or "").strip()
+            platform = (platform or "").strip()
+
+            status = (status or STANDARD_LEAD_STATUSES[0]).strip()
+            if not status:
+                status = STANDARD_LEAD_STATUSES[0]
 
             # verify bucket exists
             if self.buckets_collection.count_documents({"bucketId": bucket_id}) == 0:
                 raise HTTPException(status_code=400, detail="Referenced bucket_id does not exist")
 
-            # validate status
-            allowed_status = {"new", "contacted", "converted", "closed"}
-            if status not in allowed_status:
-                raise HTTPException(status_code=400, detail=f"status must be one of: {', '.join(allowed_status)}")
+            if status not in STANDARD_LEAD_STATUSES:
+                # Allow custom states while keeping a hint in server logs for visibility.
+                print(f"[MongoDB Service] Non-standard status received: '{status}'")
 
             lead_id = str(uuid.uuid4())
             created_at = datetime.utcnow()
@@ -261,12 +273,14 @@ class HTTP_SERVER():
                 except Exception:
                     pass
 
+            lead_id = (lead_id or "").strip()
+            status = (status or "").strip()
+
             if not lead_id or not status:
                 raise HTTPException(status_code=400, detail="lead_id and status are required")
 
-            allowed_status = {"new", "contacted", "converted", "closed"}
-            if status not in allowed_status:
-                raise HTTPException(status_code=400, detail=f"status must be one of: {', '.join(allowed_status)}")
+            if status not in STANDARD_LEAD_STATUSES:
+                print(f"[MongoDB Service] Non-standard status received for update: '{status}'")
 
             result = self.leads_collection.update_one({"leadId": lead_id}, {"$set": {"status": status}})
             if result.matched_count == 0:

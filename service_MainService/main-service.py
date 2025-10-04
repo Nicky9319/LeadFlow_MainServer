@@ -217,6 +217,7 @@ class HTTP_SERVER():
                     json={"lead_id": lead_id, "status": status},
                 )
             except httpx.RequestError as e:
+                print("Error In Making Request to MongoDB Service:", e)
                 raise HTTPException(status_code=503, detail=f"MongoDB service unreachable: {e}")
 
             try:

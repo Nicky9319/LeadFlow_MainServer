@@ -49,8 +49,8 @@
             },
             "status": {
               "bsonType": "string",
-              "enum": ["new", "contacted", "converted", "closed"],
-              "description": "current status of the lead, must be one of: new, contacted, converted, closed and is required"
+              "minLength": 1,
+              "description": "current status of the lead. Recommended values: Cold Message, First Follow Up, Second Follow Up, Meeting, Closed. Custom states are also allowed and the field is required"
             },
             "bucketId": {
               "bsonType": "string",
