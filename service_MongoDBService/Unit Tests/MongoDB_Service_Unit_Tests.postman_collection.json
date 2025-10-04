@@ -90,6 +90,41 @@
 			]
 		},
 		{
+			"name": "Get All Buckets",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://127.0.0.1:12000/api/mongodb-service/buckets/get-all-buckets",
+					"protocol": "http",
+					"host": [
+						"127.0.0.1"
+					],
+					"port": "12000",
+					"path": [
+						"api",
+						"mongodb-service",
+						"buckets",
+						"get-all-buckets"
+					]
+				}
+			},
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+							"var json = pm.response.json();",
+							"pm.test('buckets is array', function () { pm.expect(json.buckets).to.be.an('array'); });",
+							"pm.test('contains created bucket', function () { var id = pm.collectionVariables.get('bucketId'); var found = Array.isArray(json.buckets) && json.buckets.some(function (b) { return b.bucketId === id; }); pm.expect(found).to.be.true; });"
+						],
+						"type": "text/javascript"
+					}
+				}
+			]
+		},
+		{
 			"name": "Update Bucket Name",
 			"request": {
 				"method": "PUT",

@@ -48,6 +48,49 @@
           "path": ["api", "main-service", "buckets", "add-bucket"]
         }
       },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+              "var json = pm.response.json();",
+              "pm.test('bucket object returned', function () { pm.expect(json.bucket).to.be.an('object'); });",
+              "if (json.bucket && json.bucket.bucketId) { pm.collectionVariables.set('bucketId', json.bucket.bucketId); }"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Get All Buckets",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:11000/api/main-service/buckets/get-all-buckets",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "11000",
+          "path": ["api", "main-service", "buckets", "get-all-buckets"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "pm.test('buckets array present', function () { pm.expect(json.buckets).to.be.an('array'); });",
+              "pm.test('contains created bucket', function () { var id = pm.collectionVariables.get('bucketId'); var found = Array.isArray(json.buckets) && json.buckets.some(function (b) { return b.bucketId === id; }); pm.expect(found).to.be.true; });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
       "response": []
     },
     {
