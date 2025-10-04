@@ -27,6 +27,15 @@ load_dotenv()
 # Security scheme for token validation
 security = HTTPBearer(auto_error=False)
 
+class Lead_Manager():
+    def __init__(self):
+        pass
+    
+    def extract_lead_info_from_image(self):
+        pass
+    
+    
+
 class HTTP_SERVER():
     def __init__(self, httpServerHost, httpServerPort, httpServerPrivilegedIpAddress=["127.0.0.1"], data_class_instance=None):
         self.app = FastAPI()
@@ -271,7 +280,7 @@ async def start_service():
     #<HTTP_SERVER_INSTANCE_INTIALIZATION_START>
 
     #<HTTP_SERVER_PORT_START>
-    httpServerPort = 11000
+    httpServerPort = 8000
     #<HTTP_SERVER_PORT_END>
 
     #<HTTP_SERVER_HOST_START>

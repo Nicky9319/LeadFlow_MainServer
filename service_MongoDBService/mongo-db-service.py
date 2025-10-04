@@ -328,7 +328,7 @@ class Service():
 async def start_service():
     dataClass = Data()
 
-    httpServerPort = 12000
+    httpServerPort = 10000
     httpServerHost = "127.0.0.1"
     httpServerPrivilegedIpAddress = ["127.0.0.1"]
     
