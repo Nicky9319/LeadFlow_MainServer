@@ -90,8 +90,15 @@ class HTTP_SERVER():
             if result.deleted_count == 0:
                 raise HTTPException(status_code=404, detail="Bucket not found")
 
-            # Optionally, you may want to also remove or reassign leads in this bucket. For now, keep leads as-is.
-            return JSONResponse(status_code=200, content={"message": "Bucket deleted", "bucketId": bucket_id})
+            # Delete all leads associated with this bucket
+            leads_result = self.leads_collection.delete_many({"bucketId": bucket_id})
+
+            return JSONResponse(status_code=200, content={
+                "message": "Bucket deleted",
+                "bucketId": bucket_id,
+                "deleted_bucket_count": result.deleted_count,
+                "deleted_leads_count": leads_result.deleted_count,
+            })
 
         @self.app.put("/api/mongodb-service/buckets/update-bucket-name")
         async def update_bucket_name(
