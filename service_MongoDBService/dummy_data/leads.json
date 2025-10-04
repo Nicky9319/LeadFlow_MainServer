@@ -1,0 +1,42 @@
+[
+	{
+		"leadId": "lead-0001",
+		"url": "https://www.linkedin.com/in/jane-doe-0001",
+		"username": "jane.doe",
+		"platform": "LinkedIn",
+		"status": "new",
+		"bucketId": "bucket-1",
+		"notes": "Interested in product overview call",
+		"createdAt": {"$date": "2025-09-01T10:15:00Z"}
+	},
+	{
+		"leadId": "lead-0002",
+		"url": "https://www.facebook.com/john.smith",
+		"username": "john.smith",
+		"platform": "Facebook",
+		"status": "contacted",
+		"bucketId": "bucket-1",
+		"notes": null,
+		"createdAt": {"$date": "2025-09-05T14:30:00Z"}
+	},
+	{
+		"leadId": "lead-0003",
+		"url": "https://twitter.com/alex_sales",
+		"username": "alex_sales",
+		"platform": "Twitter",
+		"status": "converted",
+		"bucketId": "bucket-2",
+		"notes": "Converted after trial",
+		"createdAt": {"$date": "2025-08-20T08:00:00Z"}
+	},
+	{
+		"leadId": "lead-0004",
+		"url": "https://www.linkedin.com/in/emily-marketing",
+		"username": "emily.marketing",
+		"platform": "LinkedIn",
+		"status": "contacted",
+		"bucketId": "bucket-3",
+		"notes": "High priority lead",
+		"createdAt": {"$date": "2025-09-20T16:45:00Z"}
+	}
+]

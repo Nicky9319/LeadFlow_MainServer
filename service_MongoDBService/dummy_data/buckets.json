@@ -1,0 +1,14 @@
+[
+	{
+		"bucketId": "bucket-1",
+		"bucketName": "Prospects"
+	},
+	{
+		"bucketId": "bucket-2",
+		"bucketName": "Customers"
+	},
+	{
+		"bucketId": "bucket-3",
+		"bucketName": "HighValue"
+	}
+]

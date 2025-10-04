@@ -50,7 +50,7 @@ class HTTP_SERVER():
 
     async def configure_routes(self):
 
-        @self.app.post("/api/main-service/")
+        @self.app.get("/api/main-service/")
         async def ping_main_service(request: Request):
             print("Ping received at main-service")
             return JSONResponse(content={"message": "Main service is active"}, status_code=200)
