@@ -25,10 +25,8 @@ sudo -S apt install python3.12-venv -y
 sudo -S apt install -y python3.12-dev build-essential
 
 # Define environmental variables
-sudo python3.12 -m venv .venv
+python3.12 -m venv .venv
 
-# Changing the user to root user for full control
-sudo su 
 
 # Activate the virtual environment and install dependencies
 source .venv/bin/activate
