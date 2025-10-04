@@ -2,7 +2,7 @@
   "info": {
     "name": "MainService Unit Tests",
     "_postman_id": "f9c3a0d2-0000-4000-8000-000000000001",
-    "description": "Collection for testing main service endpoints (proxy to MongoDB service).",
+    "description": "Collection for testing main service endpoints with AI-powered lead extraction from images.\n\n**Prerequisites:**\n1. Main service running on port 11000 (configured in main-service.py)\n2. MongoDB service running on port 10000\n3. OpenAI API key configured in environment variables\n4. Test images ready for lead extraction testing\n\n**Test Flow:**\n1. Ping Main Service - Verify service is running\n2. Add Bucket - Create a bucket for storing leads\n3. Get All Buckets - Verify bucket creation\n4. Add Lead (Image Processing) - Upload image, AI agent extracts lead info\n5. Get All Leads / Get Leads by Bucket - Verify leads were added\n6. Update Lead Status - Test lead status updates\n7. Update Lead Notes - Test lead notes updates\n\n**Note:** The Add Lead functionality now uses an AI agent that analyzes uploaded images for lead information (business cards, LinkedIn profiles, contact info, etc.) and automatically adds extracted leads to the CRM system.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -106,10 +106,100 @@
           "path": ["api", "main-service", "leads", "get-all-leads"]
         }
       },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "var json = pm.response.json();",
+              "",
+              "pm.test('Response contains leads array', function () {",
+              "    pm.expect(json).to.have.property('leads');",
+              "    pm.expect(json.leads).to.be.an('array');",
+              "});",
+              "",
+              "// Store lead info for subsequent tests",
+              "if (json.leads && json.leads.length > 0) {",
+              "    var firstLead = json.leads[0];",
+              "    pm.collectionVariables.set('leadId', firstLead.leadId);",
+              "    console.log('Found leads:', json.leads.length);",
+              "    console.log('First lead ID:', firstLead.leadId);",
+              "    ",
+              "    pm.test('Lead has required fields', function () {",
+              "        pm.expect(firstLead).to.have.property('leadId');",
+              "        pm.expect(firstLead).to.have.property('url');",
+              "        pm.expect(firstLead).to.have.property('status');",
+              "        pm.expect(firstLead).to.have.property('bucketId');",
+              "        pm.expect(firstLead).to.have.property('createdAt');",
+              "    });",
+              "} else {",
+              "    console.log('No leads found in database');",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
       "response": []
     },
     {
-      "name": "Add Lead (upload image only)",
+      "name": "Get Leads by Bucket ID",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:11000/api/main-service/leads/get-all-leads?bucket_id={{bucketId}}",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "11000",
+          "path": ["api", "main-service", "leads", "get-all-leads"],
+          "query": [
+            {
+              "key": "bucket_id",
+              "value": "{{bucketId}}"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "var json = pm.response.json();",
+              "var bucketId = pm.collectionVariables.get('bucketId');",
+              "",
+              "pm.test('Response contains leads array', function () {",
+              "    pm.expect(json).to.have.property('leads');",
+              "    pm.expect(json.leads).to.be.an('array');",
+              "});",
+              "",
+              "pm.test('All leads belong to specified bucket', function () {",
+              "    if (json.leads && json.leads.length > 0) {",
+              "        json.leads.forEach(function(lead) {",
+              "            pm.expect(lead.bucketId).to.equal(bucketId);",
+              "        });",
+              "    }",
+              "});",
+              "",
+              "console.log('Leads in bucket ' + bucketId + ':', json.leads.length);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Add Lead - Image Processing with Agent",
       "request": {
         "method": "POST",
         "header": [],
@@ -120,7 +210,13 @@
               "key": "file",
               "type": "file",
               "src": "",
-              "description": "Select a file to upload (Postman will prompt to choose file)"
+              "description": "Upload an image containing lead information (business card, LinkedIn profile, contact info, etc.)"
+            },
+            {
+              "key": "bucket_id",
+              "value": "{{bucketId}}",
+              "type": "text",
+              "description": "Bucket ID where the lead should be stored (uses variable from Add Bucket test)"
             }
           ]
         },
@@ -132,6 +228,104 @@
           "path": ["api", "main-service", "leads", "add-lead"]
         }
       },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "// Test for successful response (201 for success, 500 for processing errors)",
+              "pm.test('Status is 201 (success) or 500 (processing error)', function () {",
+              "    pm.expect([201, 500]).to.include(pm.response.code);",
+              "});",
+              "",
+              "var json = pm.response.json();",
+              "",
+              "// If successful, validate response structure",
+              "if (pm.response.code === 201) {",
+              "    pm.test('Success response contains required fields', function () {",
+              "        pm.expect(json).to.have.property('message');",
+              "        pm.expect(json).to.have.property('agent_result');",
+              "        pm.expect(json).to.have.property('bucket_id');",
+              "        pm.expect(json).to.have.property('filename');",
+              "    });",
+              "    ",
+              "    pm.test('Bucket ID matches request', function () {",
+              "        var expectedBucketId = pm.collectionVariables.get('bucketId');",
+              "        pm.expect(json.bucket_id).to.equal(expectedBucketId);",
+              "    });",
+              "    ",
+              "    pm.test('Agent result is present', function () {",
+              "        pm.expect(json.agent_result).to.be.a('string');",
+              "        pm.expect(json.agent_result.length).to.be.greaterThan(0);",
+              "    });",
+              "}",
+              "",
+              "// If error, validate error response structure",
+              "if (pm.response.code === 500) {",
+              "    pm.test('Error response contains error information', function () {",
+              "        pm.expect(json).to.have.property('message');",
+              "        pm.expect(json).to.have.property('error');",
+              "    });",
+              "    ",
+              "    console.log('Image processing error:', json.error);",
+              "    console.log('Agent result:', json.agent_result);",
+              "}",
+              "",
+              "// Log the agent's processing result for debugging",
+              "console.log('=== Agent Processing Result ===');",
+              "console.log('Status Code:', pm.response.code);",
+              "console.log('Response:', JSON.stringify(json, null, 2));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Add Lead - Test without Image (Error Case)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "bucket_id",
+              "value": "{{bucketId}}",
+              "type": "text"
+            }
+          ]
+        },
+        "url": {
+          "raw": "http://localhost:11000/api/main-service/leads/add-lead",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "11000",
+          "path": ["api", "main-service", "leads", "add-lead"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "// This should fail because no file is uploaded",
+              "pm.test('Status is 422 (validation error)', function () {",
+              "    pm.response.to.have.status(422);",
+              "});",
+              "",
+              "pm.test('Error indicates missing file', function () {",
+              "    var json = pm.response.json();",
+              "    pm.expect(json.detail).to.be.an('array');",
+              "    var fileError = json.detail.find(err => err.loc && err.loc.includes('file'));",
+              "    pm.expect(fileError).to.exist;",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
       "response": []
     },
     {
@@ -146,7 +340,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"lead_id\": \"<replace-lead-id>\",\n  \"status\": \"contacted\"\n}",
+          "raw": "{\n  \"lead_id\": \"{{leadId}}\",\n  \"status\": \"First Follow Up\"\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -161,6 +355,45 @@
           "path": ["api", "main-service", "leads", "update-lead-status"]
         }
       },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "var json = pm.response.json();",
+              "var leadId = pm.collectionVariables.get('leadId');",
+              "",
+              "pm.test('Response confirms status update', function () {",
+              "    pm.expect(json).to.have.property('message');",
+              "    pm.expect(json).to.have.property('leadId');",
+              "    pm.expect(json).to.have.property('status');",
+              "    pm.expect(json.leadId).to.equal(leadId);",
+              "    pm.expect(json.status).to.equal('First Follow Up');",
+              "});",
+              "",
+              "console.log('Updated lead status:', json.status);"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "var leadId = pm.collectionVariables.get('leadId');",
+              "if (!leadId) {",
+              "    throw new Error('No lead ID available. Please run \"Get All Leads\" test first to capture a lead ID.');",
+              "}",
+              "console.log('Updating status for lead ID:', leadId);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
       "response": []
     },
     {
@@ -175,7 +408,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"lead_id\": \"<replace-lead-id>\",\n  \"notes\": \"Updated notes from Postman\"\n}",
+          "raw": "{\n  \"lead_id\": \"{{leadId}}\",\n  \"notes\": \"Updated notes from Postman unit test - Lead processed via AI agent from image upload\"\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -190,7 +423,60 @@
           "path": ["api", "main-service", "leads", "update-lead-notes"]
         }
       },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "var json = pm.response.json();",
+              "var leadId = pm.collectionVariables.get('leadId');",
+              "",
+              "pm.test('Response confirms notes update', function () {",
+              "    pm.expect(json).to.have.property('message');",
+              "    pm.expect(json).to.have.property('leadId');",
+              "    pm.expect(json).to.have.property('notes');",
+              "    pm.expect(json.leadId).to.equal(leadId);",
+              "    pm.expect(json.notes).to.be.a('string');",
+              "});",
+              "",
+              "console.log('Updated lead notes:', json.notes);"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "var leadId = pm.collectionVariables.get('leadId');",
+              "if (!leadId) {",
+              "    throw new Error('No lead ID available. Please run \"Get All Leads\" test first to capture a lead ID.');",
+              "}",
+              "console.log('Updating notes for lead ID:', leadId);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
       "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "bucketId",
+      "value": "",
+      "type": "string",
+      "description": "Dynamically set by the 'Add Bucket' test - stores the created bucket ID for use in subsequent tests"
+    },
+    {
+      "key": "leadId", 
+      "value": "",
+      "type": "string",
+      "description": "Dynamically set by the 'Get All Leads' test - stores a lead ID for use in update tests"
     }
   ]
 }

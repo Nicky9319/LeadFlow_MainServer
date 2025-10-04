@@ -6,3 +6,5 @@ logs/*
 service_CustomerService/__pycache__
 service_VastAIService/__pycache__
 service_VastAIService/lodalasan/
+
+.env

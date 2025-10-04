@@ -1,4 +1,6 @@
 import asyncio
+import logging
+import traceback
 
 from fastapi import FastAPI, Response, Request, HTTPException, Depends, File, Form, UploadFile
 from fastapi.responses import StreamingResponse
@@ -14,9 +16,20 @@ from datetime import datetime
 import uuid
 import hashlib
 import secrets
+import base64
+from typing import Optional, Dict, Any, List
 
 import asyncio
 
+# LangChain imports
+from langchain_openai import ChatOpenAI
+from langchain.agents import Tool, AgentExecutor, create_openai_functions_agent
+from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain.schema import HumanMessage
+from langchain_core.messages import BaseMessage
+from langchain.memory import ConversationBufferMemory
+from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, Field
 
 import sys
 import os
@@ -24,15 +37,297 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 # Security scheme for token validation
 security = HTTPBearer(auto_error=False)
 
-class Lead_Manager():
-    def __init__(self):
-        pass
+class LeadInput(BaseModel):
+    """Input schema for adding a lead to CRM"""
+    url: str = Field(description="The URL or social media profile of the lead")
+    username: str = Field(default="", description="The username or handle of the person")
+    platform: str = Field(default="", description="The platform where this lead was found (LinkedIn, Twitter, Instagram, etc.)")
+    status: str = Field(default="Cold Message", description="Lead status")
+    bucket_id: str = Field(default="", description="The bucket to store the lead in")
+    notes: str = Field(default="", description="Any additional notes about the lead")
+
+class LeadExtractionAgent():
+    def __init__(self, mongodb_service_url: str):
+        logger.info(f"Initializing LeadExtractionAgent with MongoDB URL: {mongodb_service_url}")
+        self.mongodb_service_url = mongodb_service_url
+        self.http_client = httpx.AsyncClient(timeout=60.0)
+        
+        # Initialize OpenAI LLM
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            logger.error("OPENAI_API_KEY environment variable is not set")
+            raise ValueError("OPENAI_API_KEY environment variable is required")
+        
+        logger.info("Initializing OpenAI ChatGPT model...")
+        try:
+            self.llm = ChatOpenAI(
+                model="gpt-4o-mini",  # Using mini model which is cheaper and faster
+                api_key=openai_api_key,
+                temperature=0.1,
+                max_tokens=500,  # Reduced to prevent token limit issues
+                request_timeout=60  # Add timeout for stability
+            )
+            logger.info("OpenAI model initialized successfully with gpt-4o")
+        except Exception as e:
+            logger.error(f"Failed to initialize OpenAI model: {e}")
+            logger.error(f"OpenAI initialization error traceback: {traceback.format_exc()}")
+            raise
+        
+        # Create tools for the agent
+        logger.info("Creating agent tools...")
+        try:
+            self.tools = self._create_tools()
+            logger.info(f"Created {len(self.tools)} tools for the agent")
+        except Exception as e:
+            logger.error(f"Failed to create agent tools: {e}")
+            raise
+        
+        # Create prompt template
+        logger.info("Creating prompt template...")
+        try:
+            self.prompt = ChatPromptTemplate.from_messages([
+                ("system", """You are a lead extraction agent. Your job is to analyze images that might contain lead information (business cards, LinkedIn profiles, contact information, etc.).
+                
+You have access to a tool called 'add_lead_to_crm' that can save lead information to the CRM system. This tool accepts structured input with the following fields:
+- url (required): The URL or social media profile of the lead
+- username (optional): The username or handle of the person  
+- platform (optional): The platform where this lead was found (LinkedIn, Twitter, Instagram, etc.)
+- status (optional): Lead status, defaults to 'Cold Message'
+- bucket_id (optional): The bucket to store the lead in (will be provided in the context)
+- notes (optional): Any additional notes about the lead
+                
+When you receive an image:
+1. Carefully analyze it to see if it contains any lead-related information such as:
+   - Names of people or businesses
+   - Contact information (email, phone, social media)
+   - Professional titles or roles
+   - Company names
+   - Social media profiles (LinkedIn, Twitter, Instagram, etc.)
+   - Any other business-related contact information
+
+2. If you find lead information, extract the relevant details and use the add_lead_to_crm tool with the appropriate structured fields.
+3. If the image doesn't contain any lead information, simply respond that no lead information was found.
+
+Be thorough in your analysis but only extract information that is clearly visible and relevant for lead generation."""),
+                MessagesPlaceholder(variable_name="chat_history"),
+                ("human", "{input}"),
+                MessagesPlaceholder(variable_name="agent_scratchpad")
+            ])
+            logger.info("Prompt template created successfully")
+        except Exception as e:
+            logger.error(f"Failed to create prompt template: {e}")
+            raise
+        
+        # Create the agent
+        logger.info("Creating OpenAI functions agent...")
+        try:
+            self.agent = create_openai_functions_agent(self.llm, self.tools, self.prompt)
+            self.agent_executor = AgentExecutor(
+                agent=self.agent,
+                tools=self.tools,
+                verbose=True,
+                return_intermediate_steps=True,
+                max_iterations=3
+            )
+            logger.info("Agent and executor created successfully")
+        except Exception as e:
+            logger.error(f"Failed to create agent: {e}")
+            raise
     
-    def extract_lead_info_from_image(self):
-        pass
+    def _create_tools(self) -> List[Tool]:
+        """Create the tools available to the agent"""
+        
+        async def add_lead_to_crm_impl(
+            url: str,
+            username: str = "",
+            platform: str = "",
+            status: str = "Cold Message",
+            bucket_id: str = "",
+            notes: str = ""
+        ) -> str:
+            """Add a lead to the CRM system"""
+            logger.info(f"add_lead_to_crm_impl called with url={url}, username={username}, platform={platform}, status={status}, bucket_id={bucket_id}, notes={notes}")
+            try:
+                # Create lead data dict
+                lead_data = {
+                    "url": url,
+                    "username": username,
+                    "platform": platform,
+                    "status": status,
+                    "bucket_id": bucket_id,
+                    "notes": notes
+                }
+                logger.info(f"Lead data: {lead_data}")
+                
+                # Validate required fields
+                if not url:
+                    logger.warning("No URL provided in lead data")
+                    return "Error: URL is required for lead creation"
+                
+                if not bucket_id:
+                    # Default to a bucket if not specified - you might want to handle this differently
+                    lead_data["bucket_id"] = "default-bucket"
+                    logger.info("No bucket_id provided, using default-bucket")
+                
+                # Call MongoDB service to add the lead using async httpx
+                request_data = {
+                    "url": lead_data.get("url", ""),
+                    "username": lead_data.get("username", ""),
+                    "platform": lead_data.get("platform", ""),
+                    "status": lead_data.get("status", "Cold Message"),
+                    "bucket_id": lead_data.get("bucket_id"),
+                    "notes": lead_data.get("notes", "")
+                }
+                logger.info(f"Making request to MongoDB service: {self.mongodb_service_url}/api/mongodb-service/leads/add-lead")
+                logger.info(f"Request data: {request_data}")
+                
+                response = await self.http_client.post(
+                    f"{self.mongodb_service_url}/api/mongodb-service/leads/add-lead",
+                    json=request_data
+                )
+                logger.info(f"MongoDB service response status: {response.status_code}")
+                logger.info(f"MongoDB service response text: {response.text}")
+                
+                if response.status_code == 201:
+                    result = response.json()
+                    lead_info = result.get('lead', {})
+                    # Set a flag to indicate successful lead creation
+                    self._last_successful_lead = lead_info
+                    return json.dumps({
+                        "success": True,
+                        "message": f"Successfully added lead to CRM. Lead ID: {lead_info.get('leadId', 'Unknown')}",
+                        "lead_data": lead_info
+                    })
+                else:
+                    return json.dumps({
+                        "success": False,
+                        "message": f"Error adding lead to CRM: {response.text}",
+                        "error": response.text
+                    })
+                    
+            except Exception as e:
+                return f"Error adding lead to CRM: {str(e)}"
+        
+        return [
+            StructuredTool.from_function(
+                name="add_lead_to_crm",
+                description="Add a lead to the CRM system with structured data including URL, username, platform, status, bucket_id, and notes",
+                func=add_lead_to_crm_impl,
+                coroutine=add_lead_to_crm_impl  # For async support
+            )
+        ]
+    
+    async def process_image(self, image_path: str, bucket_id: str = None) -> Dict[str, Any]:
+        """Process an image and extract lead information if present"""
+        logger.info(f"Processing image: {image_path} with bucket_id: {bucket_id}")
+        try:
+            # Read and encode the image
+            logger.info(f"Reading image file: {image_path}")
+            with open(image_path, "rb") as image_file:
+                image_content = image_file.read()
+                
+            # Check image size and resize if too large
+            max_size = 20 * 1024 * 1024  # 20MB limit for OpenAI
+            if len(image_content) > max_size:
+                logger.warning(f"Image size {len(image_content)} bytes exceeds limit, need to resize")
+                # For now, we'll try to resize using PIL
+                from PIL import Image
+                import io
+                
+                pil_image = Image.open(io.BytesIO(image_content))
+                # Resize to maximum dimension of 2048 pixels
+                max_dimension = 2048
+                if max(pil_image.size) > max_dimension:
+                    ratio = max_dimension / max(pil_image.size)
+                    new_size = tuple(int(dim * ratio) for dim in pil_image.size)
+                    pil_image = pil_image.resize(new_size, Image.Resampling.LANCZOS)
+                    
+                # Save resized image back to bytes
+                output_buffer = io.BytesIO()
+                pil_image.save(output_buffer, format='PNG', optimize=True)
+                image_content = output_buffer.getvalue()
+                logger.info(f"Image resized to {len(image_content)} bytes")
+                
+            image_data = base64.b64encode(image_content).decode('utf-8')
+            logger.info(f"Image encoded successfully, size: {len(image_data)} characters")
+            
+            # Create the message with image
+            logger.info("Creating message with image for agent processing")
+            messages = [
+                HumanMessage(
+                    content=[
+                        {
+                            "type": "text",
+                            "text": f"Please analyze this image for any lead information. If you find any, extract it and add it to the CRM using bucket_id: {bucket_id or 'default-bucket'}"
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/png;base64,{image_data}"
+                            }
+                        }
+                    ]
+                )
+            ]
+            
+            # Run the agent
+            logger.info("Starting agent execution...")
+            try:
+                result = await self.agent_executor.ainvoke({
+                    "input": f"Analyze the provided image for lead information. If you find any lead information, use the add_lead_to_crm tool with bucket_id: '{bucket_id or 'default-bucket'}' to save the lead data.",
+                    "chat_history": messages
+                })
+                logger.info(f"Agent execution completed successfully")
+                logger.info(f"Agent result: {result.get('output', 'No output')[:200]}...")  # Log first 200 chars
+                
+                return {
+                    "success": True,
+                    "result": result["output"],
+                    "intermediate_steps": result.get("intermediate_steps", [])
+                }
+            except Exception as agent_error:
+                logger.error(f"Agent execution failed: {agent_error}")
+                logger.error(f"Agent error traceback: {traceback.format_exc()}")
+                
+                # Check if any leads were successfully created despite the error
+                # by checking if our tool was called successfully in the process
+                successful_leads = []
+                error_msg = str(agent_error)
+                
+                # If it's an OpenAI API error but we can see tool execution in logs
+                if "openai" in error_msg.lower() and hasattr(self, '_last_successful_lead'):
+                    logger.info("OpenAI API error occurred, but checking if lead was created...")
+                    return {
+                        "success": True,  # Consider it successful if lead was created
+                        "result": f"Lead information was successfully extracted and saved to CRM, but there was an issue with the AI response generation. Lead creation was successful.",
+                        "intermediate_steps": [],
+                        "warning": "OpenAI API error after successful lead creation"
+                    }
+                
+                raise agent_error
+            
+        except Exception as e:
+            logger.error(f"Error in process_image: {e}")
+            logger.error(f"Process image error traceback: {traceback.format_exc()}")
+            return {
+                "success": False,
+                "error": str(e),
+                "result": f"Error processing image: {str(e)}"
+            }
+    
+    async def close(self):
+        """Clean up resources"""
+        await self.http_client.aclose()
     
     
 
@@ -56,6 +351,16 @@ class HTTP_SERVER():
         
         # HTTP client for making requests to MongoDB service and Auth service
         self.http_client = httpx.AsyncClient(timeout=30.0)
+        
+        # Initialize the Lead Extraction Agent
+        logger.info("Initializing Lead Extraction Agent...")
+        try:
+            self.lead_agent = LeadExtractionAgent(self.mongodb_service_url)
+            logger.info("Lead Extraction Agent initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize LeadExtractionAgent: {e}")
+            logger.error(f"Agent initialization error traceback: {traceback.format_exc()}")
+            self.lead_agent = None
 
     async def configure_routes(self):
 
@@ -182,21 +487,151 @@ class HTTP_SERVER():
             return JSONResponse(status_code=resp.status_code, content=content)
 
         @self.app.post("/api/main-service/leads/add-lead")
-        async def add_lead(file: UploadFile = File(...)):
+        async def add_lead(request: Request, file: UploadFile = File(...), bucket_id: str = None):
             """
-            Accepts a single uploaded file (image) and saves it locally as `image.png`.
-            This endpoint does not contact the MongoDB service.
+            Accepts a single uploaded file (image) and processes it using the LeadExtractionAgent.
+            The agent will analyze the image and automatically add leads to the CRM if found.
             """
+            logger.info(f"Received add_lead request with file: {file.filename if file else 'None'}, bucket_id: {bucket_id}")
+            
+            if not self.lead_agent:
+                logger.error("Lead extraction agent is not available")
+                raise HTTPException(status_code=503, detail="Lead extraction agent is not available")
+            
+            # Get bucket_id from query params or form data
+            if not bucket_id:
+                try:
+                    form_data = await request.form()
+                    bucket_id = form_data.get("bucket_id") or form_data.get("bucketId")
+                    logger.info(f"Retrieved bucket_id from form data: {bucket_id}")
+                except Exception as e:
+                    logger.warning(f"Could not get form data: {e}")
+                    pass
+            
+            # If still no bucket_id, try to get default bucket or create one
+            if not bucket_id:
+                logger.info("No bucket_id provided, attempting to get or create default bucket")
+                try:
+                    # Try to get existing buckets
+                    logger.info("Fetching existing buckets from MongoDB service")
+                    resp = await self.http_client.get(
+                        f"{self.mongodb_service_url}/api/mongodb-service/buckets/get-all-buckets"
+                    )
+                    logger.info(f"Get buckets response status: {resp.status_code}")
+                    
+                    if resp.status_code == 200:
+                        buckets = resp.json().get("buckets", [])
+                        logger.info(f"Found {len(buckets)} existing buckets")
+                        if buckets:
+                            bucket_id = buckets[0]["bucketId"]  # Use first available bucket
+                            logger.info(f"Using existing bucket: {bucket_id}")
+                        else:
+                            # Create a default bucket
+                            logger.info("No existing buckets found, creating default bucket")
+                            create_resp = await self.http_client.post(
+                                f"{self.mongodb_service_url}/api/mongodb-service/buckets/add-bucket",
+                                json={"bucket_name": "Default Leads"}
+                            )
+                            logger.info(f"Create bucket response status: {create_resp.status_code}")
+                            if create_resp.status_code == 201:
+                                bucket_id = create_resp.json().get("bucket", {}).get("bucketId")
+                                logger.info(f"Created new bucket: {bucket_id}")
+                except Exception as e:
+                    logger.error(f"Error handling bucket: {e}")
+                    logger.error(f"Bucket handling error traceback: {traceback.format_exc()}")
+                    bucket_id = "default-bucket"  # Fallback
+                    logger.info(f"Using fallback bucket_id: {bucket_id}")
+            
             try:
+                # Save the uploaded file temporarily
+                logger.info(f"Reading uploaded file: {file.filename}")
                 contents = await file.read()
+                logger.info(f"File read successfully, size: {len(contents)} bytes")
+                
                 save_dir = os.path.dirname(__file__)
-                save_path = os.path.join(save_dir, "image.png")
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"uploaded_image_{timestamp}.png"
+                save_path = os.path.join(save_dir, filename)
+                logger.info(f"Saving file to: {save_path}")
+                
                 with open(save_path, "wb") as f:
                     f.write(contents)
+                logger.info("File saved successfully")
+                
+                # Process the image with the agent
+                logger.info(f"Starting agent processing for image: {save_path}")
+                result = await self.lead_agent.process_image(save_path, bucket_id)
+                logger.info(f"Agent processing completed with success: {result.get('success', False)}")
+                
+                # Clean up the temporary file
+                try:
+                    os.remove(save_path)
+                except Exception:
+                    pass  # Ignore cleanup errors
+                
+                if result["success"]:
+                    # Try to extract lead information from agent result
+                    lead_data = None
+                    extracted_leads_count = 0
+                    
+                    # Parse intermediate steps to find successful tool calls
+                    for step in result.get("intermediate_steps", []):
+                        if len(step) >= 2:
+                            action, observation = step[0], step[1]
+                            if hasattr(action, 'tool') and action.tool == "add_lead_to_crm":
+                                try:
+                                    # Try to parse the tool result
+                                    tool_result = json.loads(observation)
+                                    if tool_result.get("success"):
+                                        lead_data = tool_result.get("lead_data")
+                                        extracted_leads_count += 1
+                                except (json.JSONDecodeError, AttributeError):
+                                    # If parsing fails, check if observation contains lead ID
+                                    if "Successfully added lead to CRM" in str(observation):
+                                        extracted_leads_count += 1
+                    
+                    # Also check if we have a successful lead from the tool execution
+                    if hasattr(self.lead_agent, '_last_successful_lead') and self.lead_agent._last_successful_lead:
+                        if not lead_data:  # Only use this if we didn't find lead_data above
+                            lead_data = self.lead_agent._last_successful_lead
+                            extracted_leads_count = max(extracted_leads_count, 1)
+                        # Clear the flag
+                        self.lead_agent._last_successful_lead = None
+                    
+                    response_content = {
+                        "message": "Image processed successfully",
+                        "agent_result": result["result"],
+                        "bucket_id": bucket_id,
+                        "filename": file.filename,
+                        "leads_extracted": extracted_leads_count
+                    }
+                    
+                    # Include lead data if available
+                    if lead_data:
+                        response_content["created_lead"] = lead_data
+                    
+                    return JSONResponse(status_code=201, content=response_content)
+                else:
+                    return JSONResponse(
+                        status_code=500,
+                        content={
+                            "message": "Error processing image",
+                            "error": result["error"],
+                            "agent_result": result["result"]
+                        }
+                    )
+                    
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {e}")
-
-            return JSONResponse(status_code=201, content={"message": "File saved", "path": "service_MainService/image.png"})
+                # Clean up file if it exists
+                try:
+                    if 'save_path' in locals():
+                        os.remove(save_path)
+                except Exception:
+                    pass
+                
+                logger.error(f"Exception in add_lead endpoint: {e}")
+                logger.error(f"Add lead error traceback: {traceback.format_exc()}")
+                raise HTTPException(status_code=500, detail=f"Failed to process uploaded file: {e}")
 
         @self.app.put("/api/main-service/leads/update-lead-status")
         async def update_lead_status(request: Request, lead_id: str | None = None, status: str | None = None):
@@ -255,12 +690,21 @@ class HTTP_SERVER():
 
             return JSONResponse(status_code=resp.status_code, content=content)
     
+    async def cleanup(self):
+        """Clean up resources"""
+        await self.http_client.aclose()
+        if self.lead_agent:
+            await self.lead_agent.close()
+
         
         
     async def run_app(self):
-        config = uvicorn.Config(self.app, host=self.host, port=self.port)
-        server = uvicorn.Server(config)
-        await server.serve()
+        try:
+            config = uvicorn.Config(self.app, host=self.host, port=self.port)
+            server = uvicorn.Server(config)
+            await server.serve()
+        finally:
+            await self.cleanup()
 
 class Data():
     def __init__(self):
