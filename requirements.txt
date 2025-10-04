@@ -1,0 +1,17 @@
+requests
+eventlet
+pymongo
+gunicorn
+
+# redis
+fastapi
+uvicorn
+pymongo
+
+httpx
+
+dotenv
+boto3>=1.26.0
+
+python-multipart
+

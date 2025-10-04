@@ -1,0 +1,8 @@
+Testing/test.blend
+Testing/test_scene.blend
+Testing/renderedImages
+Testing/ffmpeg/*
+logs/*
+service_CustomerService/__pycache__
+service_VastAIService/__pycache__
+service_VastAIService/lodalasan/

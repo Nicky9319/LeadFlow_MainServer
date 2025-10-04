@@ -1,0 +1,74 @@
+{
+  "database": "leadflow",
+  "collections": [
+    {
+      "name": "buckets",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "title": "buckets",
+          "required": ["bucketId", "bucketName"],
+          "properties": {
+            "bucketId": {
+              "bsonType": "string",
+              "description": "unique bucket identifier, must be a string and is required"
+            },
+            "bucketName": {
+              "bsonType": "string",
+              "description": "name of the bucket, must be a string and is required"
+            }
+          }
+        }
+      },
+      "validationLevel": "strict",
+      "validationAction": "error"
+    },
+    {
+      "name": "leads",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "title": "leads",
+          "required": ["leadId", "url", "username", "platform", "status", "bucketId", "createdAt"],
+          "properties": {
+            "leadId": {
+              "bsonType": "string",
+              "description": "unique lead identifier, must be a string and is required"
+            },
+            "url": {
+              "bsonType": "string",
+              "description": "URL of the lead, must be a string and is required"
+            },
+            "username": {
+              "bsonType": "string",
+              "description": "username associated with the lead, must be a string and is required"
+            },
+            "platform": {
+              "bsonType": "string",
+              "description": "platform of the lead (e.g., LinkedIn, Facebook), must be a string and is required"
+            },
+            "status": {
+              "bsonType": "string",
+              "enum": ["new", "contacted", "converted", "closed"],
+              "description": "current status of the lead, must be one of: new, contacted, converted, closed and is required"
+            },
+            "bucketId": {
+              "bsonType": "string",
+              "description": "reference to bucketId in buckets collection, must be a string and is required"
+            },
+            "notes": {
+              "bsonType": ["string", "null"],
+              "description": "optional notes about the lead, must be a string if present"
+            },
+            "createdAt": {
+              "bsonType": "date",
+              "description": "timestamp when the lead was created, must be a date and is required"
+            }
+          }
+        }
+      },
+      "validationLevel": "strict",
+      "validationAction": "error"
+    }
+  ]
+}

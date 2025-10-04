@@ -1,0 +1,22 @@
+{
+    "apps":[
+        {
+            "name": "mainService",
+            "script": "./service_MainService/main-service.py",
+            "interpreter": ".venv/bin/python",
+            "out_file": "./logs/mainService-out.log",
+            "error_file": "./logs/mainService-error.log",
+            "merge_logs": true,
+            "namespace": "neuralperk"
+        },
+        {
+            "name": "mongoDBService",
+            "script": "./service_MongoDBService/mongo-db-service.py",
+            "interpreter": ".venv/bin/python",
+            "out_file": "./logs/mongoDBService-out.log",
+            "error_file": "./logs/mongoDBService-error.log",
+            "merge_logs": true,
+            "namespace": "neuralperk"
+        }
+    ]
+}
