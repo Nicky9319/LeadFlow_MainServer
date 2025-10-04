@@ -54,6 +54,180 @@ class HTTP_SERVER():
         async def ping_main_service(request: Request):
             print("Ping received at main-service")
             return JSONResponse(content={"message": "Main service is active"}, status_code=200)
+        # -------------------------
+        # Bucket endpoints (proxy to MongoDB service)
+        # -------------------------
+        @self.app.post("/api/main-service/buckets/add-bucket")
+        async def add_new_bucket(request: Request, bucket_name: str | None = None):
+            # accept via query param or JSON body
+            if not bucket_name:
+                try:
+                    body = await request.json()
+                    bucket_name = body.get("bucket_name") or body.get("bucketName")
+                except Exception:
+                    bucket_name = None
+
+            if not bucket_name:
+                raise HTTPException(status_code=400, detail="bucket_name is required")
+
+            try:
+                resp = await self.http_client.post(
+                    f"{self.mongodb_service_url}/api/mongodb-service/buckets/add-bucket",
+                    json={"bucket_name": bucket_name},
+                )
+            except httpx.RequestError as e:
+                raise HTTPException(status_code=503, detail=f"MongoDB service unreachable: {e}")
+
+            try:
+                content = resp.json()
+            except Exception:
+                content = {"detail": resp.text}
+
+            return JSONResponse(status_code=resp.status_code, content=content)
+
+        @self.app.delete("/api/main-service/buckets/delete-bucket")
+        async def delete_bucket(bucket_id: str | None = None):
+            if not bucket_id:
+                raise HTTPException(status_code=400, detail="bucket_id is required")
+            try:
+                resp = await self.http_client.delete(
+                    f"{self.mongodb_service_url}/api/mongodb-service/buckets/delete-bucket",
+                    params={"bucket_id": bucket_id},
+                )
+            except httpx.RequestError as e:
+                raise HTTPException(status_code=503, detail=f"MongoDB service unreachable: {e}")
+
+            try:
+                content = resp.json()
+            except Exception:
+                content = {"detail": resp.text}
+
+            return JSONResponse(status_code=resp.status_code, content=content)
+
+        @self.app.put("/api/main-service/buckets/update-bucket-name")
+        async def update_bucket_name(request: Request, bucket_id: str | None = None, bucket_name: str | None = None):
+            # accept via query params or JSON body
+            if not bucket_id or not bucket_name:
+                try:
+                    body = await request.json()
+                    bucket_id = bucket_id or body.get("bucket_id") or body.get("bucketId")
+                    bucket_name = bucket_name or body.get("bucket_name") or body.get("bucketName")
+                except Exception:
+                    pass
+
+            if not bucket_id or not bucket_name:
+                raise HTTPException(status_code=400, detail="bucket_id and bucket_name are required")
+
+            try:
+                resp = await self.http_client.put(
+                    f"{self.mongodb_service_url}/api/mongodb-service/buckets/update-bucket-name",
+                    json={"bucket_id": bucket_id, "bucket_name": bucket_name},
+                )
+            except httpx.RequestError as e:
+                raise HTTPException(status_code=503, detail=f"MongoDB service unreachable: {e}")
+
+            try:
+                content = resp.json()
+            except Exception:
+                content = {"detail": resp.text}
+
+            return JSONResponse(status_code=resp.status_code, content=content)
+
+        # -------------------------
+        # Leads endpoints (proxy to MongoDB service)
+        # -------------------------
+        @self.app.get("/api/main-service/leads/get-all-leads")
+        async def get_all_leads(bucket_id: str | None = None):
+            params = {}
+            if bucket_id:
+                params["bucket_id"] = bucket_id
+            try:
+                resp = await self.http_client.get(
+                    f"{self.mongodb_service_url}/api/mongodb-service/leads/get-all-leads",
+                    params=params,
+                )
+            except httpx.RequestError as e:
+                raise HTTPException(status_code=503, detail=f"MongoDB service unreachable: {e}")
+
+            try:
+                content = resp.json()
+            except Exception:
+                content = {"detail": resp.text}
+
+            return JSONResponse(status_code=resp.status_code, content=content)
+
+        @self.app.post("/api/main-service/leads/add-lead")
+        async def add_lead(file: UploadFile = File(...)):
+            """
+            Accepts a single uploaded file (image) and saves it locally as `image.png`.
+            This endpoint does not contact the MongoDB service.
+            """
+            try:
+                contents = await file.read()
+                save_dir = os.path.dirname(__file__)
+                save_path = os.path.join(save_dir, "image.png")
+                with open(save_path, "wb") as f:
+                    f.write(contents)
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {e}")
+
+            return JSONResponse(status_code=201, content={"message": "File saved", "path": "service_MainService/image.png"})
+
+        @self.app.put("/api/main-service/leads/update-lead-status")
+        async def update_lead_status(request: Request, lead_id: str | None = None, status: str | None = None):
+            if not lead_id or not status:
+                try:
+                    body = await request.json()
+                    lead_id = lead_id or body.get("lead_id") or body.get("leadId")
+                    status = status or body.get("status")
+                except Exception:
+                    pass
+
+            if not lead_id or not status:
+                raise HTTPException(status_code=400, detail="lead_id and status are required")
+
+            try:
+                resp = await self.http_client.put(
+                    f"{self.mongodb_service_url}/api/mongodb-service/leads/update-lead-status",
+                    json={"lead_id": lead_id, "status": status},
+                )
+            except httpx.RequestError as e:
+                raise HTTPException(status_code=503, detail=f"MongoDB service unreachable: {e}")
+
+            try:
+                content = resp.json()
+            except Exception:
+                content = {"detail": resp.text}
+
+            return JSONResponse(status_code=resp.status_code, content=content)
+
+        @self.app.put("/api/main-service/leads/update-lead-notes")
+        async def update_lead_notes(request: Request, lead_id: str | None = None, notes: str | None = None):
+            if not lead_id or notes is None:
+                try:
+                    body = await request.json()
+                    lead_id = lead_id or body.get("lead_id") or body.get("leadId")
+                    notes = notes or body.get("notes")
+                except Exception:
+                    pass
+
+            if not lead_id:
+                raise HTTPException(status_code=400, detail="lead_id is required")
+
+            try:
+                resp = await self.http_client.put(
+                    f"{self.mongodb_service_url}/api/mongodb-service/leads/update-lead-notes",
+                    json={"lead_id": lead_id, "notes": notes},
+                )
+            except httpx.RequestError as e:
+                raise HTTPException(status_code=503, detail=f"MongoDB service unreachable: {e}")
+
+            try:
+                content = resp.json()
+            except Exception:
+                content = {"detail": resp.text}
+
+            return JSONResponse(status_code=resp.status_code, content=content)
     
         
         

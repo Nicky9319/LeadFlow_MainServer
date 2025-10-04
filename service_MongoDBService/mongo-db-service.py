@@ -51,6 +51,7 @@ class HTTP_SERVER():
         except Exception:
             # ignore errors creating indexes if already exist or server settings
             pass
+        
     async def configure_routes(self):
         # -------------------------
         # Health Check Endpoint

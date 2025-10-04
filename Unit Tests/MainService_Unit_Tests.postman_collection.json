@@ -1,0 +1,184 @@
+{
+  "info": {
+    "name": "MainService Unit Tests",
+    "_postman_id": "f9c3a0d2-0000-4000-8000-000000000000",
+    "description": "Collection for testing main service endpoints (proxy to MongoDB service).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Ping Main Service",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:11000/api/main-service/",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "11000",
+          "path": ["api", "main-service", ""]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Add Bucket",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"bucket_name\": \"Test Bucket\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:11000/api/main-service/buckets/add-bucket",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "11000",
+          "path": ["api", "main-service", "buckets", "add-bucket"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get All Leads",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:11000/api/main-service/leads/get-all-leads",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "11000",
+          "path": ["api", "main-service", "leads", "get-all-leads"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Add Lead (multipart/form-data with image)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "",
+              "description": "Select a file to upload (Postman will prompt to choose file)"
+            },
+            {
+              "key": "url",
+              "value": "http://example.com/profile",
+              "type": "text"
+            },
+            {
+              "key": "username",
+              "value": "testuser",
+              "type": "text"
+            },
+            {
+              "key": "platform",
+              "value": "instagram",
+              "type": "text"
+            },
+            {
+              "key": "status",
+              "value": "new",
+              "type": "text"
+            },
+            {
+              "key": "bucket_id",
+              "value": "",
+              "type": "text",
+              "description": "Set an existing bucket_id created earlier"
+            },
+            {
+              "key": "notes",
+              "value": "Sample lead created via Postman",
+              "type": "text"
+            }
+          ]
+        },
+        "url": {
+          "raw": "http://localhost:11000/api/main-service/leads/add-lead",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "11000",
+          "path": ["api", "main-service", "leads", "add-lead"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Update Lead Status",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"lead_id\": \"<replace-lead-id>\",\n  \"status\": \"contacted\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:11000/api/main-service/leads/update-lead-status",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "11000",
+          "path": ["api", "main-service", "leads", "update-lead-status"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Update Lead Notes",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"lead_id\": \"<replace-lead-id>\",\n  \"notes\": \"Updated notes from Postman\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:11000/api/main-service/leads/update-lead-notes",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "11000",
+          "path": ["api", "main-service", "leads", "update-lead-notes"]
+        }
+      },
+      "response": []
+    }
+  ]
+}
