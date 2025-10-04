@@ -85,6 +85,22 @@ class HTTP_SERVER():
 
             return JSONResponse(status_code=resp.status_code, content=content)
 
+        @self.app.get("/api/main-service/buckets/get-all-buckets")
+        async def get_all_buckets():
+            try:
+                resp = await self.http_client.get(
+                    f"{self.mongodb_service_url}/api/mongodb-service/buckets/get-all-buckets",
+                )
+            except httpx.RequestError as e:
+                raise HTTPException(status_code=503, detail=f"MongoDB service unreachable: {e}")
+
+            try:
+                content = resp.json()
+            except Exception:
+                content = {"detail": resp.text}
+
+            return JSONResponse(status_code=resp.status_code, content=content)
+
         @self.app.delete("/api/main-service/buckets/delete-bucket")
         async def delete_bucket(bucket_id: str | None = None):
             if not bucket_id:

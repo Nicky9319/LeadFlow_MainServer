@@ -94,6 +94,18 @@ class HTTP_SERVER():
 
             return JSONResponse(status_code=201, content={"message": "Bucket created", "bucket": doc})
 
+        @self.app.get("/api/mongodb-service/buckets/get-all-buckets")
+        async def get_all_buckets():
+            cursor = self.buckets_collection.find({})
+            buckets = []
+            for doc in cursor:
+                bucket = dict(doc)
+                if "_id" in bucket:
+                    bucket.pop("_id")
+                buckets.append(bucket)
+
+            return JSONResponse(status_code=200, content={"buckets": buckets})
+
         @self.app.delete("/api/mongodb-service/buckets/delete-bucket")
         async def delete_bucket(
             bucket_id: str,
