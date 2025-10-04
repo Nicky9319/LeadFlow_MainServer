@@ -10,8 +10,6 @@ import hashlib
 import os
 
 import asyncio
-import aio_pika
-
 
 import sys
 import os
