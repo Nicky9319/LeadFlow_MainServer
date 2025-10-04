@@ -7,7 +7,7 @@
             "out_file": "./logs/mainService-out.log",
             "error_file": "./logs/mainService-error.log",
             "merge_logs": true,
-            "namespace": "neuralperk"
+            "namespace": "leadflow"
         },
         {
             "name": "mongoDBService",
@@ -16,7 +16,7 @@
             "out_file": "./logs/mongoDBService-out.log",
             "error_file": "./logs/mongoDBService-error.log",
             "merge_logs": true,
-            "namespace": "neuralperk"
+            "namespace": "leadflow"
         }
     ]
 }
