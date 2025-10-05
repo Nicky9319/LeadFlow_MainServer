@@ -332,16 +332,31 @@ class HTTP_SERVER():
             if not lead_id:
                 raise HTTPException(status_code=400, detail="lead_id is required")
 
+            print(f"[DELETE LEAD DEBUG] Received lead_id: '{lead_id}', bucket_id: '{bucket_id}'")
+
             # Build query - if bucket_id is provided, use it for additional validation
             query = {"leadId": lead_id}
             if bucket_id:
                 query["bucketId"] = bucket_id
 
+            print(f"[DELETE LEAD DEBUG] Query: {query}")
+
+            # First, let's check if the lead exists at all (without bucket constraint)
+            lead_exists_anywhere = self.leads_collection.find_one({"leadId": lead_id})
+            print(f"[DELETE LEAD DEBUG] Lead exists anywhere: {lead_exists_anywhere is not None}")
+            if lead_exists_anywhere:
+                print(f"[DELETE LEAD DEBUG] Lead found with bucketId: {lead_exists_anywhere.get('bucketId')}")
+
             # Find the lead first to return info about what was deleted
             lead_to_delete = self.leads_collection.find_one(query)
+            print(f"[DELETE LEAD DEBUG] Lead found with current query: {lead_to_delete is not None}")
+            
             if not lead_to_delete:
                 if bucket_id:
-                    raise HTTPException(status_code=404, detail="Lead not found in the specified bucket")
+                    if lead_exists_anywhere:
+                        raise HTTPException(status_code=404, detail=f"Lead found but not in bucket '{bucket_id}'. Lead is in bucket '{lead_exists_anywhere.get('bucketId')}'")
+                    else:
+                        raise HTTPException(status_code=404, detail="Lead not found in the specified bucket")
                 else:
                     raise HTTPException(status_code=404, detail="Lead not found")
 

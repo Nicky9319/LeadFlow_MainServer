@@ -707,10 +707,14 @@ class HTTP_SERVER():
             if not lead_id:
                 raise HTTPException(status_code=400, detail="lead_id is required")
 
+            print(f"[MAIN SERVICE DELETE DEBUG] Received lead_id: '{lead_id}', bucket_id: '{bucket_id}'")
+
             # Prepare request data for MongoDB service
             params = {"lead_id": lead_id}
             if bucket_id:
                 params["bucket_id"] = bucket_id
+
+            print(f"[MAIN SERVICE DELETE DEBUG] Sending params to MongoDB service: {params}")
 
             try:
                 resp = await self.http_client.request(
