@@ -29,7 +29,7 @@ jobs:
           node-version: '20'
 
       - name: Install PM2
-        run: sudo -S npm install -g pm2
+        run: echo '226044' | sudo -S npm install -g pm2
 
       - name: Running deployment script
         run: bash .github/scripts/deploy.sh
