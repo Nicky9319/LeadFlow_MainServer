@@ -5,7 +5,7 @@ set -e  # Exit on any error
 echo "🚀 Deploying to production..."
 
 # Define target directory
-TARGET_DIR="/home/azureuser/backend"
+TARGET_DIR="/home/paarth/backend"
 
 # Clean old deployment
 echo '226044' | sudo -S rm -rf $TARGET_DIR  # Use -rf to avoid prompt and handle directories properly
