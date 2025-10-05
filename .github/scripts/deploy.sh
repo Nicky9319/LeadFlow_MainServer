@@ -8,21 +8,21 @@ echo "🚀 Deploying to production..."
 TARGET_DIR="/home/azureuser/backend"
 
 # Clean old deployment
-sudo -S rm -rf $TARGET_DIR  # Use -rf to avoid prompt and handle directories properly
-sudo -S mkdir -p $TARGET_DIR
+echo '226044' | sudo -S rm -rf $TARGET_DIR  # Use -rf to avoid prompt and handle directories properly
+echo '226044' | sudo -S mkdir -p $TARGET_DIR
 
 # Copy new files
-sudo -S cp -r ./* $TARGET_DIR/
+echo '226044' | sudo -S cp -r ./* $TARGET_DIR/
 
 # Change ownership (optional, but safer if other services access this folder)
-sudo -S chown -R azureuser:azureuser $TARGET_DIR
+echo '226044' | sudo -S chown -R paarth:paarth $TARGET_DIR
 
 # Move into the target directory
 cd $TARGET_DIR
 
 # Installing the latest version of Python 3.12 venv
-sudo -S apt install python3.12-venv -y
-sudo -S apt install -y python3.12-dev build-essential
+echo '226044' | sudo -S apt install python3.12-venv -y
+echo '226044' | sudo -S apt install -y python3.12-dev build-essential
 
 # Define environmental variables
 python3.12 -m venv .venv
@@ -47,10 +47,10 @@ pm2 stop all || echo "⚠️ PM2 stop failed, continuing..."
 pm2 flush
 pm2 start process.json
 
-sudo -S docker-compose down --remove-orphans || echo "⚠️ docker-compose down failed, continuing..."
-sudo -S docker-compose up -d 
+echo '226044' | sudo -S docker-compose down --remove-orphans || echo "⚠️ docker-compose down failed, continuing..."
+echo '226044' | sudo -S docker-compose up -d
 
-echo "✅ Deployment complete."
+echo "✅ Deployment complete."`
 
 
 
