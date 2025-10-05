@@ -713,7 +713,8 @@ class HTTP_SERVER():
                 params["bucket_id"] = bucket_id
 
             try:
-                resp = await self.http_client.delete(
+                resp = await self.http_client.request(
+                    "DELETE",
                     f"{self.mongodb_service_url}/api/mongodb-service/leads/delete-lead",
                     params=params,
                 )
