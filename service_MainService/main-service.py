@@ -60,7 +60,7 @@ class LeadInput(BaseModel):
 
 class LeadExtractionAgent():
     def __init__(self, mongodb_service_url: str):
-        logger.info(f"Initializing LeadExtractionAgent with MongoDB URL: {mongodb_service_url}")
+        print(f"Initializing LeadExtractionAgent with MongoDB URL: {mongodb_service_url}")
         self.mongodb_service_url = mongodb_service_url
         self.http_client = httpx.AsyncClient(timeout=60.0)
         
@@ -70,7 +70,7 @@ class LeadExtractionAgent():
             logger.error("OPENAI_API_KEY environment variable is not set")
             raise ValueError("OPENAI_API_KEY environment variable is required")
         
-        logger.info("Initializing OpenAI ChatGPT model...")
+        print("Initializing OpenAI ChatGPT model...")
         try:
             self.llm = ChatOpenAI(
                 model="gpt-4o-mini",  # Using mini model which is cheaper and faster
@@ -79,23 +79,23 @@ class LeadExtractionAgent():
                 max_tokens=500,  # Reduced to prevent token limit issues
                 request_timeout=60  # Add timeout for stability
             )
-            logger.info("OpenAI model initialized successfully with gpt-4o")
+            print("OpenAI model initialized successfully with gpt-4o")
         except Exception as e:
             logger.error(f"Failed to initialize OpenAI model: {e}")
             logger.error(f"OpenAI initialization error traceback: {traceback.format_exc()}")
             raise
         
         # Create tools for the agent
-        logger.info("Creating agent tools...")
+        print("Creating agent tools...")
         try:
             self.tools = self._create_tools()
-            logger.info(f"Created {len(self.tools)} tools for the agent")
+            print(f"Created {len(self.tools)} tools for the agent")
         except Exception as e:
             logger.error(f"Failed to create agent tools: {e}")
             raise
         
         # Create prompt template
-        logger.info("Creating prompt template...")
+        print("Creating prompt template...")
         try:
             self.prompt = ChatPromptTemplate.from_messages([
                 ("system", """You are a lead extraction agent. Your job is to analyze images that might contain lead information (business cards, LinkedIn profiles, contact information, etc.).
@@ -126,13 +126,13 @@ class LeadExtractionAgent():
                 ("human", "{input}"),
                 MessagesPlaceholder(variable_name="agent_scratchpad")
             ])
-            logger.info("Prompt template created successfully")
+            print("Prompt template created successfully")
         except Exception as e:
             logger.error(f"Failed to create prompt template: {e}")
             raise
         
         # Create the agent
-        logger.info("Creating OpenAI functions agent...")
+        print("Creating OpenAI functions agent...")
         try:
             self.agent = create_openai_functions_agent(self.llm, self.tools, self.prompt)
             self.agent_executor = AgentExecutor(
@@ -142,7 +142,7 @@ class LeadExtractionAgent():
                 return_intermediate_steps=True,
                 max_iterations=3
             )
-            logger.info("Agent and executor created successfully")
+            print("Agent and executor created successfully")
         except Exception as e:
             logger.error(f"Failed to create agent: {e}")
             raise
@@ -159,7 +159,7 @@ class LeadExtractionAgent():
             notes: str = ""
         ) -> str:
             """Add a lead to the CRM system"""
-            logger.info(f"add_lead_to_crm_impl called with url={url}, username={username}, platform={platform}, status={status}, bucket_id={bucket_id}, notes={notes}")
+            print(f"add_lead_to_crm_impl called with url={url}, username={username}, platform={platform}, status={status}, bucket_id={bucket_id}, notes={notes}")
             try:
                 # Create lead data dict
                 lead_data = {
@@ -170,7 +170,7 @@ class LeadExtractionAgent():
                     "bucket_id": bucket_id,
                     "notes": notes
                 }
-                logger.info(f"Lead data: {lead_data}")
+                print(f"Lead data: {lead_data}")
                 
                 # Validate required fields
                 if not url:
@@ -180,7 +180,7 @@ class LeadExtractionAgent():
                 if not bucket_id:
                     # Default to a bucket if not specified - you might want to handle this differently
                     lead_data["bucket_id"] = "default-bucket"
-                    logger.info("No bucket_id provided, using default-bucket")
+                    print("No bucket_id provided, using default-bucket")
                 
                 # Call MongoDB service to add the lead using async httpx
                 request_data = {
@@ -191,15 +191,15 @@ class LeadExtractionAgent():
                     "bucket_id": lead_data.get("bucket_id"),
                     "notes": lead_data.get("notes", "")
                 }
-                logger.info(f"Making request to MongoDB service: {self.mongodb_service_url}/api/mongodb-service/leads/add-lead")
-                logger.info(f"Request data: {request_data}")
+                print(f"Making request to MongoDB service: {self.mongodb_service_url}/api/mongodb-service/leads/add-lead")
+                print(f"Request data: {request_data}")
                 
                 response = await self.http_client.post(
                     f"{self.mongodb_service_url}/api/mongodb-service/leads/add-lead",
                     json=request_data
                 )
-                logger.info(f"MongoDB service response status: {response.status_code}")
-                logger.info(f"MongoDB service response text: {response.text}")
+                print(f"MongoDB service response status: {response.status_code}")
+                print(f"MongoDB service response text: {response.text}")
                 
                 if response.status_code == 201:
                     result = response.json()
@@ -232,9 +232,9 @@ class LeadExtractionAgent():
     
     async def process_image_from_memory(self, image_content: bytes, bucket_id: str = None, filename: str = "uploaded_image") -> Dict[str, Any]:
         """Process an image from memory and extract lead information if present"""
-        logger.info(f"Processing image: {filename} (in memory) with bucket_id: {bucket_id}")
+        print(f"Processing image: {filename} (in memory) with bucket_id: {bucket_id}")
         try:
-            logger.info(f"Processing image from memory, size: {len(image_content)} bytes")
+            print(f"Processing image from memory, size: {len(image_content)} bytes")
                 
             # Check image size and resize if too large
             max_size = 20 * 1024 * 1024  # 20MB limit for OpenAI
@@ -256,13 +256,13 @@ class LeadExtractionAgent():
                 output_buffer = io.BytesIO()
                 pil_image.save(output_buffer, format='PNG', optimize=True)
                 image_content = output_buffer.getvalue()
-                logger.info(f"Image resized to {len(image_content)} bytes")
+                print(f"Image resized to {len(image_content)} bytes")
                 
             image_data = base64.b64encode(image_content).decode('utf-8')
-            logger.info(f"Image encoded successfully, size: {len(image_data)} characters")
+            print(f"Image encoded successfully, size: {len(image_data)} characters")
             
             # Create the message with image
-            logger.info("Creating message with image for agent processing")
+            print("Creating message with image for agent processing")
             messages = [
                 HumanMessage(
                     content=[
@@ -281,14 +281,14 @@ class LeadExtractionAgent():
             ]
             
             # Run the agent
-            logger.info("Starting agent execution...")
+            print("Starting agent execution...")
             try:
                 result = await self.agent_executor.ainvoke({
                     "input": f"Analyze the provided image for lead information. If you find any lead information, use the add_lead_to_crm tool with bucket_id: '{bucket_id or 'default-bucket'}' to save the lead data.",
                     "chat_history": messages
                 })
-                logger.info(f"Agent execution completed successfully")
-                logger.info(f"Agent result: {result.get('output', 'No output')[:200]}...")  # Log first 200 chars
+                print(f"Agent execution completed successfully")
+                print(f"Agent result: {result.get('output', 'No output')[:200]}...")  # Log first 200 chars
                 
                 return {
                     "success": True,
@@ -306,7 +306,7 @@ class LeadExtractionAgent():
                 
                 # If it's an OpenAI API error but we can see tool execution in logs
                 if "openai" in error_msg.lower() and hasattr(self, '_last_successful_lead'):
-                    logger.info("OpenAI API error occurred, but checking if lead was created...")
+                    print("OpenAI API error occurred, but checking if lead was created...")
                     return {
                         "success": True,  # Consider it successful if lead was created
                         "result": f"Lead information was successfully extracted and saved to CRM, but there was an issue with the AI response generation. Lead creation was successful.",
@@ -328,12 +328,12 @@ class LeadExtractionAgent():
     async def process_image_background(self, image_content: bytes, bucket_id: str, filename: str, request_id: str = None):
         """Process image in background and log results"""
         try:
-            logger.info(f"Starting background processing for {filename} (request_id: {request_id})")
+            print(f"Starting background processing for {filename} (request_id: {request_id})")
             result = await self.process_image_from_memory(image_content, bucket_id, filename)
             
             if result["success"]:
-                logger.info(f"Background processing completed successfully for {filename} (request_id: {request_id})")
-                logger.info(f"Agent result: {result.get('result', 'No result')}")
+                print(f"Background processing completed successfully for {filename} (request_id: {request_id})")
+                print(f"Agent result: {result.get('result', 'No result')}")
                 
                 # Log any leads that were extracted
                 extracted_leads_count = 0
@@ -349,7 +349,7 @@ class LeadExtractionAgent():
                                 if "Successfully added lead to CRM" in str(observation):
                                     extracted_leads_count += 1
                 
-                logger.info(f"Background processing extracted {extracted_leads_count} leads for {filename} (request_id: {request_id})")
+                print(f"Background processing extracted {extracted_leads_count} leads for {filename} (request_id: {request_id})")
             else:
                 logger.error(f"Background processing failed for {filename} (request_id: {request_id}): {result.get('error', 'Unknown error')}")
                 
@@ -385,10 +385,10 @@ class HTTP_SERVER():
         self.http_client = httpx.AsyncClient(timeout=30.0)
         
         # Initialize the Lead Extraction Agent
-        logger.info("Initializing Lead Extraction Agent...")
+        print("Initializing Lead Extraction Agent...")
         try:
             self.lead_agent = LeadExtractionAgent(self.mongodb_service_url)
-            logger.info("Lead Extraction Agent initialized successfully")
+            print("Lead Extraction Agent initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize LeadExtractionAgent: {e}")
             logger.error(f"Agent initialization error traceback: {traceback.format_exc()}")
@@ -524,7 +524,7 @@ class HTTP_SERVER():
             Accepts a single uploaded file (image) and processes it in the background using the LeadExtractionAgent.
             Returns immediate response while processing happens in background.
             """
-            logger.info(f"Received add_lead request with file: {file.filename if file else 'None'}, bucket_id: {bucket_id}")
+            print(f"Received add_lead request with file: {file.filename if file else 'None'}, bucket_id: {bucket_id}")
             
             if not self.lead_agent:
                 logger.error("Lead extraction agent is not available")
@@ -532,64 +532,64 @@ class HTTP_SERVER():
             
             # Generate unique request ID for tracking
             request_id = str(uuid.uuid4())[:8]
-            logger.info(f"Generated request_id: {request_id} for file: {file.filename}")
+            print(f"Generated request_id: {request_id} for file: {file.filename}")
             
             # Get bucket_id from query params or form data
             if not bucket_id:
                 try:
                     form_data = await request.form()
                     bucket_id = form_data.get("bucket_id") or form_data.get("bucketId")
-                    logger.info(f"Retrieved bucket_id from form data: {bucket_id}")
+                    print(f"Retrieved bucket_id from form data: {bucket_id}")
                 except Exception as e:
                     logger.warning(f"Could not get form data: {e}")
                     pass
             
             # If still no bucket_id, try to get default bucket or create one
             if not bucket_id:
-                logger.info("No bucket_id provided, attempting to get or create default bucket")
+                print("No bucket_id provided, attempting to get or create default bucket")
                 try:
                     # Try to get existing buckets
-                    logger.info("Fetching existing buckets from MongoDB service")
+                    print("Fetching existing buckets from MongoDB service")
                     resp = await self.http_client.get(
                         f"{self.mongodb_service_url}/api/mongodb-service/buckets/get-all-buckets"
                     )
-                    logger.info(f"Get buckets response status: {resp.status_code}")
+                    print(f"Get buckets response status: {resp.status_code}")
                     
                     if resp.status_code == 200:
                         buckets = resp.json().get("buckets", [])
-                        logger.info(f"Found {len(buckets)} existing buckets")
+                        print(f"Found {len(buckets)} existing buckets")
                         if buckets:
                             bucket_id = buckets[0]["bucketId"]  # Use first available bucket
-                            logger.info(f"Using existing bucket: {bucket_id}")
+                            print(f"Using existing bucket: {bucket_id}")
                         else:
                             # Create a default bucket
-                            logger.info("No existing buckets found, creating default bucket")
+                            print("No existing buckets found, creating default bucket")
                             create_resp = await self.http_client.post(
                                 f"{self.mongodb_service_url}/api/mongodb-service/buckets/add-bucket",
                                 json={"bucket_name": "Default Leads"}
                             )
-                            logger.info(f"Create bucket response status: {create_resp.status_code}")
+                            print(f"Create bucket response status: {create_resp.status_code}")
                             if create_resp.status_code == 201:
                                 bucket_id = create_resp.json().get("bucket", {}).get("bucketId")
-                                logger.info(f"Created new bucket: {bucket_id}")
+                                print(f"Created new bucket: {bucket_id}")
                 except Exception as e:
                     logger.error(f"Error handling bucket: {e}")
                     logger.error(f"Bucket handling error traceback: {traceback.format_exc()}")
                     bucket_id = "default-bucket"  # Fallback
-                    logger.info(f"Using fallback bucket_id: {bucket_id}")
+                    print(f"Using fallback bucket_id: {bucket_id}")
             
             try:
                 # Read the uploaded file into memory
-                logger.info(f"Reading uploaded file: {file.filename}")
+                print(f"Reading uploaded file: {file.filename}")
                 image_content = await file.read()
-                logger.info(f"File read successfully, size: {len(image_content)} bytes")
+                print(f"File read successfully, size: {len(image_content)} bytes")
                 
                 # Validate file is not empty
                 if len(image_content) == 0:
                     raise HTTPException(status_code=400, detail="Uploaded file is empty")
                 
                 # Schedule background processing
-                logger.info(f"Scheduling background processing for {file.filename} (request_id: {request_id})")
+                print(f"Scheduling background processing for {file.filename} (request_id: {request_id})")
                 background_tasks.add_task(
                     self.lead_agent.process_image_background,
                     image_content,
@@ -609,7 +609,7 @@ class HTTP_SERVER():
                     "note": "Lead extraction will happen in the background. Check logs for processing results."
                 }
                 
-                logger.info(f"Returning immediate response for request_id: {request_id}")
+                print(f"Returning immediate response for request_id: {request_id}")
                 return JSONResponse(status_code=202, content=response_content)
                     
             except HTTPException:
