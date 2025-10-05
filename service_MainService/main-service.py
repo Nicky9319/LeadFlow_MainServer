@@ -692,6 +692,40 @@ class HTTP_SERVER():
                 content = {"detail": resp.text}
 
             return JSONResponse(status_code=resp.status_code, content=content)
+
+        @self.app.delete("/api/main-service/leads/delete-lead")
+        async def delete_lead(request: Request, lead_id: str | None = None, bucket_id: str | None = None):
+            # accept via query params or JSON body
+            if not lead_id:
+                try:
+                    body = await request.json()
+                    lead_id = lead_id or body.get("lead_id") or body.get("leadId")
+                    bucket_id = bucket_id or body.get("bucket_id") or body.get("bucketId")
+                except Exception:
+                    pass
+
+            if not lead_id:
+                raise HTTPException(status_code=400, detail="lead_id is required")
+
+            # Prepare request data for MongoDB service
+            params = {"lead_id": lead_id}
+            if bucket_id:
+                params["bucket_id"] = bucket_id
+
+            try:
+                resp = await self.http_client.delete(
+                    f"{self.mongodb_service_url}/api/mongodb-service/leads/delete-lead",
+                    params=params,
+                )
+            except httpx.RequestError as e:
+                raise HTTPException(status_code=503, detail=f"MongoDB service unreachable: {e}")
+
+            try:
+                content = resp.json()
+            except Exception:
+                content = {"detail": resp.text}
+
+            return JSONResponse(status_code=resp.status_code, content=content)
     
     async def cleanup(self):
         """Clean up resources"""

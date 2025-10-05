@@ -313,6 +313,54 @@ class HTTP_SERVER():
                 raise HTTPException(status_code=404, detail="Lead not found")
 
             return JSONResponse(status_code=200, content={"message": "Lead notes updated", "leadId": lead_id, "notes": notes_val})
+
+        @self.app.delete("/api/mongodb-service/leads/delete-lead")
+        async def delete_lead(
+            request: Request,
+            lead_id: str | None = None,
+            bucket_id: str | None = None,
+        ):
+            # accept via query params or JSON body
+            if not lead_id:
+                try:
+                    body = await request.json()
+                    lead_id = lead_id or body.get("lead_id") or body.get("leadId")
+                    bucket_id = bucket_id or body.get("bucket_id") or body.get("bucketId")
+                except Exception:
+                    pass
+
+            if not lead_id:
+                raise HTTPException(status_code=400, detail="lead_id is required")
+
+            # Build query - if bucket_id is provided, use it for additional validation
+            query = {"leadId": lead_id}
+            if bucket_id:
+                query["bucketId"] = bucket_id
+
+            # Find the lead first to return info about what was deleted
+            lead_to_delete = self.leads_collection.find_one(query)
+            if not lead_to_delete:
+                if bucket_id:
+                    raise HTTPException(status_code=404, detail="Lead not found in the specified bucket")
+                else:
+                    raise HTTPException(status_code=404, detail="Lead not found")
+
+            # Delete the lead
+            result = self.leads_collection.delete_one(query)
+            if result.deleted_count == 0:
+                raise HTTPException(status_code=404, detail="Lead not found")
+
+            # Prepare response without ObjectId
+            deleted_lead = dict(lead_to_delete)
+            if "_id" in deleted_lead:
+                deleted_lead.pop("_id")
+            if "createdAt" in deleted_lead and isinstance(deleted_lead["createdAt"], datetime):
+                deleted_lead["createdAt"] = deleted_lead["createdAt"].isoformat()
+
+            return JSONResponse(status_code=200, content={
+                "message": "Lead deleted successfully",
+                "deleted_lead": deleted_lead
+            })
        
     async def run_app(self):
         config = uvicorn.Config(self.app, host=self.host, port=self.port)
