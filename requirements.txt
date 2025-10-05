@@ -18,3 +18,4 @@ python-multipart
 
 langchain
 langchain_openai
+Pillow

@@ -6,6 +6,7 @@ from fastapi import FastAPI, Response, Request, HTTPException, Depends, File, Fo
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import BackgroundTasks
 
 from fastapi.responses import JSONResponse
 
@@ -33,6 +34,7 @@ from pydantic import BaseModel, Field
 
 import sys
 import os
+import io
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -98,27 +100,28 @@ class LeadExtractionAgent():
             self.prompt = ChatPromptTemplate.from_messages([
                 ("system", """You are a lead extraction agent. Your job is to analyze images that might contain lead information (business cards, LinkedIn profiles, contact information, etc.).
                 
-You have access to a tool called 'add_lead_to_crm' that can save lead information to the CRM system. This tool accepts structured input with the following fields:
-- url (required): The URL or social media profile of the lead
-- username (optional): The username or handle of the person  
-- platform (optional): The platform where this lead was found (LinkedIn, Twitter, Instagram, etc.)
-- status (optional): Lead status, defaults to 'Cold Message'
-- bucket_id (optional): The bucket to store the lead in (will be provided in the context)
-- notes (optional): Any additional notes about the lead
+                        You have access to a tool called 'add_lead_to_crm' that can save lead information to the CRM system. This tool accepts structured input with the following fields:
+                        - url (required): The URL or social media profile of the lead
+                        - username (optional): The username or handle of the person  
+                        - platform (optional): The platform where this lead was found (LinkedIn, Twitter, Instagram, etc.)
+                        - status (optional): Lead status, defaults to 'Cold Message'
+                        - bucket_id (optional): The bucket to store the lead in (will be provided in the context)
+                        - notes (optional): Any additional notes about the lead
+                                        
+                        When you receive an image:
+                        1. Carefully analyze it to see if it contains any lead-related information such as:
+                        - Names of people or businesses
+                        - Contact information (email, phone, social media)
+                        - Professional titles or roles
+                        - Company names
+                        - Social media profiles (LinkedIn, Twitter, Instagram, etc.)
+                        - Any other business-related contact information
+
+                        2. If you find lead information, extract the relevant details and use the add_lead_to_crm tool with the appropriate structured fields.
+                        3. If the image doesn't contain any lead information, simply respond that no lead information was found.
+
+                        Be thorough in your analysis but only extract information that is clearly visible and relevant for lead generation."""),
                 
-When you receive an image:
-1. Carefully analyze it to see if it contains any lead-related information such as:
-   - Names of people or businesses
-   - Contact information (email, phone, social media)
-   - Professional titles or roles
-   - Company names
-   - Social media profiles (LinkedIn, Twitter, Instagram, etc.)
-   - Any other business-related contact information
-
-2. If you find lead information, extract the relevant details and use the add_lead_to_crm tool with the appropriate structured fields.
-3. If the image doesn't contain any lead information, simply respond that no lead information was found.
-
-Be thorough in your analysis but only extract information that is clearly visible and relevant for lead generation."""),
                 MessagesPlaceholder(variable_name="chat_history"),
                 ("human", "{input}"),
                 MessagesPlaceholder(variable_name="agent_scratchpad")
@@ -227,14 +230,11 @@ Be thorough in your analysis but only extract information that is clearly visibl
             )
         ]
     
-    async def process_image(self, image_path: str, bucket_id: str = None) -> Dict[str, Any]:
-        """Process an image and extract lead information if present"""
-        logger.info(f"Processing image: {image_path} with bucket_id: {bucket_id}")
+    async def process_image_from_memory(self, image_content: bytes, bucket_id: str = None, filename: str = "uploaded_image") -> Dict[str, Any]:
+        """Process an image from memory and extract lead information if present"""
+        logger.info(f"Processing image: {filename} (in memory) with bucket_id: {bucket_id}")
         try:
-            # Read and encode the image
-            logger.info(f"Reading image file: {image_path}")
-            with open(image_path, "rb") as image_file:
-                image_content = image_file.read()
+            logger.info(f"Processing image from memory, size: {len(image_content)} bytes")
                 
             # Check image size and resize if too large
             max_size = 20 * 1024 * 1024  # 20MB limit for OpenAI
@@ -317,7 +317,7 @@ Be thorough in your analysis but only extract information that is clearly visibl
                 raise agent_error
             
         except Exception as e:
-            logger.error(f"Error in process_image: {e}")
+            logger.error(f"Error in process_image_from_memory: {e}")
             logger.error(f"Process image error traceback: {traceback.format_exc()}")
             return {
                 "success": False,
@@ -325,6 +325,38 @@ Be thorough in your analysis but only extract information that is clearly visibl
                 "result": f"Error processing image: {str(e)}"
             }
     
+    async def process_image_background(self, image_content: bytes, bucket_id: str, filename: str, request_id: str = None):
+        """Process image in background and log results"""
+        try:
+            logger.info(f"Starting background processing for {filename} (request_id: {request_id})")
+            result = await self.process_image_from_memory(image_content, bucket_id, filename)
+            
+            if result["success"]:
+                logger.info(f"Background processing completed successfully for {filename} (request_id: {request_id})")
+                logger.info(f"Agent result: {result.get('result', 'No result')}")
+                
+                # Log any leads that were extracted
+                extracted_leads_count = 0
+                for step in result.get("intermediate_steps", []):
+                    if len(step) >= 2:
+                        action, observation = step[0], step[1]
+                        if hasattr(action, 'tool') and action.tool == "add_lead_to_crm":
+                            try:
+                                tool_result = json.loads(observation)
+                                if tool_result.get("success"):
+                                    extracted_leads_count += 1
+                            except (json.JSONDecodeError, AttributeError):
+                                if "Successfully added lead to CRM" in str(observation):
+                                    extracted_leads_count += 1
+                
+                logger.info(f"Background processing extracted {extracted_leads_count} leads for {filename} (request_id: {request_id})")
+            else:
+                logger.error(f"Background processing failed for {filename} (request_id: {request_id}): {result.get('error', 'Unknown error')}")
+                
+        except Exception as e:
+            logger.error(f"Error in background processing for {filename} (request_id: {request_id}): {e}")
+            logger.error(f"Background processing error traceback: {traceback.format_exc()}")
+
     async def close(self):
         """Clean up resources"""
         await self.http_client.aclose()
@@ -487,16 +519,20 @@ class HTTP_SERVER():
             return JSONResponse(status_code=resp.status_code, content=content)
 
         @self.app.post("/api/main-service/leads/add-lead")
-        async def add_lead(request: Request, file: UploadFile = File(...), bucket_id: str = None):
+        async def add_lead(request: Request, background_tasks: BackgroundTasks, file: UploadFile = File(...), bucket_id: str = None):
             """
-            Accepts a single uploaded file (image) and processes it using the LeadExtractionAgent.
-            The agent will analyze the image and automatically add leads to the CRM if found.
+            Accepts a single uploaded file (image) and processes it in the background using the LeadExtractionAgent.
+            Returns immediate response while processing happens in background.
             """
             logger.info(f"Received add_lead request with file: {file.filename if file else 'None'}, bucket_id: {bucket_id}")
             
             if not self.lead_agent:
                 logger.error("Lead extraction agent is not available")
                 raise HTTPException(status_code=503, detail="Lead extraction agent is not available")
+            
+            # Generate unique request ID for tracking
+            request_id = str(uuid.uuid4())[:8]
+            logger.info(f"Generated request_id: {request_id} for file: {file.filename}")
             
             # Get bucket_id from query params or form data
             if not bucket_id:
@@ -543,92 +579,42 @@ class HTTP_SERVER():
                     logger.info(f"Using fallback bucket_id: {bucket_id}")
             
             try:
-                # Save the uploaded file temporarily
+                # Read the uploaded file into memory
                 logger.info(f"Reading uploaded file: {file.filename}")
-                contents = await file.read()
-                logger.info(f"File read successfully, size: {len(contents)} bytes")
+                image_content = await file.read()
+                logger.info(f"File read successfully, size: {len(image_content)} bytes")
                 
-                save_dir = os.path.dirname(__file__)
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"uploaded_image_{timestamp}.png"
-                save_path = os.path.join(save_dir, filename)
-                logger.info(f"Saving file to: {save_path}")
+                # Validate file is not empty
+                if len(image_content) == 0:
+                    raise HTTPException(status_code=400, detail="Uploaded file is empty")
                 
-                with open(save_path, "wb") as f:
-                    f.write(contents)
-                logger.info("File saved successfully")
+                # Schedule background processing
+                logger.info(f"Scheduling background processing for {file.filename} (request_id: {request_id})")
+                background_tasks.add_task(
+                    self.lead_agent.process_image_background,
+                    image_content,
+                    bucket_id,
+                    file.filename,
+                    request_id
+                )
                 
-                # Process the image with the agent
-                logger.info(f"Starting agent processing for image: {save_path}")
-                result = await self.lead_agent.process_image(save_path, bucket_id)
-                logger.info(f"Agent processing completed with success: {result.get('success', False)}")
+                # Return immediate response
+                response_content = {
+                    "message": "Image uploaded successfully and is being processed in the background",
+                    "request_id": request_id,
+                    "bucket_id": bucket_id,
+                    "filename": file.filename,
+                    "file_size": len(image_content),
+                    "status": "processing",
+                    "note": "Lead extraction will happen in the background. Check logs for processing results."
+                }
                 
-                # Clean up the temporary file
-                try:
-                    os.remove(save_path)
-                except Exception:
-                    pass  # Ignore cleanup errors
-                
-                if result["success"]:
-                    # Try to extract lead information from agent result
-                    lead_data = None
-                    extracted_leads_count = 0
+                logger.info(f"Returning immediate response for request_id: {request_id}")
+                return JSONResponse(status_code=202, content=response_content)
                     
-                    # Parse intermediate steps to find successful tool calls
-                    for step in result.get("intermediate_steps", []):
-                        if len(step) >= 2:
-                            action, observation = step[0], step[1]
-                            if hasattr(action, 'tool') and action.tool == "add_lead_to_crm":
-                                try:
-                                    # Try to parse the tool result
-                                    tool_result = json.loads(observation)
-                                    if tool_result.get("success"):
-                                        lead_data = tool_result.get("lead_data")
-                                        extracted_leads_count += 1
-                                except (json.JSONDecodeError, AttributeError):
-                                    # If parsing fails, check if observation contains lead ID
-                                    if "Successfully added lead to CRM" in str(observation):
-                                        extracted_leads_count += 1
-                    
-                    # Also check if we have a successful lead from the tool execution
-                    if hasattr(self.lead_agent, '_last_successful_lead') and self.lead_agent._last_successful_lead:
-                        if not lead_data:  # Only use this if we didn't find lead_data above
-                            lead_data = self.lead_agent._last_successful_lead
-                            extracted_leads_count = max(extracted_leads_count, 1)
-                        # Clear the flag
-                        self.lead_agent._last_successful_lead = None
-                    
-                    response_content = {
-                        "message": "Image processed successfully",
-                        "agent_result": result["result"],
-                        "bucket_id": bucket_id,
-                        "filename": file.filename,
-                        "leads_extracted": extracted_leads_count
-                    }
-                    
-                    # Include lead data if available
-                    if lead_data:
-                        response_content["created_lead"] = lead_data
-                    
-                    return JSONResponse(status_code=201, content=response_content)
-                else:
-                    return JSONResponse(
-                        status_code=500,
-                        content={
-                            "message": "Error processing image",
-                            "error": result["error"],
-                            "agent_result": result["result"]
-                        }
-                    )
-                    
+            except HTTPException:
+                raise
             except Exception as e:
-                # Clean up file if it exists
-                try:
-                    if 'save_path' in locals():
-                        os.remove(save_path)
-                except Exception:
-                    pass
-                
                 logger.error(f"Exception in add_lead endpoint: {e}")
                 logger.error(f"Add lead error traceback: {traceback.format_exc()}")
                 raise HTTPException(status_code=500, detail=f"Failed to process uploaded file: {e}")
@@ -661,6 +647,23 @@ class HTTP_SERVER():
                 content = {"detail": resp.text}
 
             return JSONResponse(status_code=resp.status_code, content=content)
+
+        @self.app.get("/api/main-service/leads/processing-status/{request_id}")
+        async def get_processing_status(request_id: str):
+            """
+            Get the status of background processing for a given request_id.
+            Note: This is a simple implementation. For production, you might want to use Redis or database to track status.
+            """
+            # For now, this is a placeholder endpoint that acknowledges the request_id
+            # In a production environment, you'd track processing status in a database or cache
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "request_id": request_id,
+                    "message": "Processing status tracking is available through application logs. Check server logs for detailed processing results.",
+                    "note": "For real-time status tracking, consider implementing a database-backed status system."
+                }
+            )
 
         @self.app.put("/api/main-service/leads/update-lead-notes")
         async def update_lead_notes(request: Request, lead_id: str | None = None, notes: str | None = None):
