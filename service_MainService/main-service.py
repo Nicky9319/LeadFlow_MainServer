@@ -119,6 +119,13 @@ class LeadExtractionAgent():
 
                         2. If you find lead information, extract the relevant details and use the add_lead_to_crm tool with the appropriate structured fields.
                         3. If the image doesn't contain any lead information, simply respond that no lead information was found.
+                        
+                        4. keep in mind for the lead extraction especially the url itself we are looking for the url mentioned in the image that corresponds to the
+                        social media profile page for the person itself, if the image is of instagram profile and it contains the linktree url in the image make sure to use the instagram
+                        url to store not the linktree url because that corresponds to the instagram profile not the linktree profile.
+                        and if no url is clearly visible for the profile itself then dont store any url at all.
+                        
+                        5. Make sure not to make up data or store incorrect url, either the url should directly link to the profile for that platform itself or no url should be there at all.
 
                         Be thorough in your analysis but only extract information that is clearly visible and relevant for lead generation."""),
                 
