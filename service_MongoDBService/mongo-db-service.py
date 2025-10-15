@@ -314,6 +314,57 @@ class HTTP_SERVER():
 
             return JSONResponse(status_code=200, content={"message": "Lead notes updated", "leadId": lead_id, "notes": notes_val})
 
+        @self.app.put("/api/mongodb-service/leads/change-lead-bucket")
+        async def change_lead_bucket(
+            request: Request,
+            lead_id: str | None = None,
+            new_bucket_id: str | None = None,
+        ):
+            # accept via query params or JSON body
+            if not lead_id or not new_bucket_id:
+                try:
+                    body = await request.json()
+                    lead_id = lead_id or body.get("lead_id") or body.get("leadId")
+                    new_bucket_id = new_bucket_id or body.get("new_bucket_id") or body.get("newBucketId")
+                except Exception:
+                    pass
+
+            lead_id = (lead_id or "").strip()
+            new_bucket_id = (new_bucket_id or "").strip()
+
+            if not lead_id or not new_bucket_id:
+                raise HTTPException(status_code=400, detail="lead_id and new_bucket_id are required")
+
+            # Check if the lead exists
+            lead = self.leads_collection.find_one({"leadId": lead_id})
+            if not lead:
+                raise HTTPException(status_code=404, detail="Lead not found")
+
+            # Check if the new bucket exists
+            if self.buckets_collection.count_documents({"bucketId": new_bucket_id}) == 0:
+                raise HTTPException(status_code=400, detail="New bucket does not exist")
+
+            # Check if the lead is already in the target bucket
+            current_bucket_id = lead.get("bucketId")
+            if current_bucket_id == new_bucket_id:
+                raise HTTPException(status_code=400, detail="Lead is already in the specified bucket")
+
+            # Update the lead's bucket
+            result = self.leads_collection.update_one(
+                {"leadId": lead_id}, 
+                {"$set": {"bucketId": new_bucket_id}}
+            )
+            
+            if result.matched_count == 0:
+                raise HTTPException(status_code=404, detail="Lead not found")
+
+            return JSONResponse(status_code=200, content={
+                "message": "Lead bucket changed successfully", 
+                "leadId": lead_id, 
+                "oldBucketId": current_bucket_id,
+                "newBucketId": new_bucket_id
+            })
+
         @self.app.delete("/api/mongodb-service/leads/delete-lead")
         async def delete_lead(
             request: Request,

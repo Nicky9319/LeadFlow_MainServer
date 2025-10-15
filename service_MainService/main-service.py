@@ -700,6 +700,35 @@ class HTTP_SERVER():
 
             return JSONResponse(status_code=resp.status_code, content=content)
 
+        @self.app.put("/api/main-service/leads/change-lead-bucket")
+        async def change_lead_bucket(request: Request, lead_id: str | None = None, new_bucket_id: str | None = None):
+            # accept via query params or JSON body
+            if not lead_id or not new_bucket_id:
+                try:
+                    body = await request.json()
+                    lead_id = lead_id or body.get("lead_id") or body.get("leadId")
+                    new_bucket_id = new_bucket_id or body.get("new_bucket_id") or body.get("newBucketId")
+                except Exception:
+                    pass
+
+            if not lead_id or not new_bucket_id:
+                raise HTTPException(status_code=400, detail="lead_id and new_bucket_id are required")
+
+            try:
+                resp = await self.http_client.put(
+                    f"{self.mongodb_service_url}/api/mongodb-service/leads/change-lead-bucket",
+                    json={"lead_id": lead_id, "new_bucket_id": new_bucket_id},
+                )
+            except httpx.RequestError as e:
+                raise HTTPException(status_code=503, detail=f"MongoDB service unreachable: {e}")
+
+            try:
+                content = resp.json()
+            except Exception:
+                content = {"detail": resp.text}
+
+            return JSONResponse(status_code=resp.status_code, content=content)
+
         @self.app.delete("/api/main-service/leads/delete-lead")
         async def delete_lead(request: Request, lead_id: str | None = None, bucket_id: str | None = None):
             # accept via query params or JSON body

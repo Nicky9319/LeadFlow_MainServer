@@ -304,6 +304,23 @@
 			"event": [ { "listen": "test", "script": { "exec": [ "pm.test('status is 200', function () { pm.response.to.have.status(200); });", "var json = pm.response.json();", "pm.test('notes updated', function () { pm.expect(json.notes).to.eql('Followed up via email'); });" ], "type": "text/javascript" } } ]
 		},
 		{
+			"name": "Change Lead Bucket",
+			"request": {
+				"method": "PUT",
+				"header": [ { "key": "Content-Type", "value": "application/json" } ],
+				"body": { "mode": "raw", "raw": "{\n  \"lead_id\": \"{{leadId}}\",\n  \"new_bucket_id\": \"{{bucketId2}}\"\n}" },
+				"url": {
+					"raw": "http://127.0.0.1:12000/api/mongodb-service/leads/change-lead-bucket?lead_id={{leadId}}&new_bucket_id={{bucketId2}}",
+					"protocol": "http",
+					"host": ["127.0.0.1"],
+					"port": "12000",
+					"path": ["api","mongodb-service","leads","change-lead-bucket"],
+					"query": [ { "key": "lead_id", "value": "{{leadId}}" }, { "key": "new_bucket_id", "value": "{{bucketId2}}" } ]
+				}
+			},
+			"event": [ { "listen": "test", "script": { "exec": [ "pm.test('status is 200', function () { pm.response.to.have.status(200); });", "var json = pm.response.json();", "pm.test('bucket changed successfully', function () { pm.expect(json.newBucketId).to.eql(pm.collectionVariables.get('bucketId2')); });", "pm.test('old bucket returned', function () { pm.expect(json.oldBucketId).to.eql(pm.collectionVariables.get('bucketId')); });" ], "type": "text/javascript" } } ]
+		},
+		{
 			"name": "Delete Bucket",
 			"request": {
 				"method": "DELETE",

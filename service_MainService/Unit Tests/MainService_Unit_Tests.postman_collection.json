@@ -463,6 +463,80 @@
         }
       ],
       "response": []
+    },
+    {
+      "name": "Change Lead Bucket",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Response has required fields', function () {",
+              "    var json = pm.response.json();",
+              "    pm.expect(json).to.have.property('message');",
+              "    pm.expect(json).to.have.property('leadId');",
+              "    pm.expect(json).to.have.property('oldBucketId');",
+              "    pm.expect(json).to.have.property('newBucketId');",
+              "    pm.expect(json.leadId).to.equal(pm.collectionVariables.get('leadId'));",
+              "    pm.expect(json.newBucketId).to.equal(pm.collectionVariables.get('bucketId2'));",
+              "});",
+              "",
+              "console.log('Lead bucket changed successfully:', pm.response.json());"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "var leadId = pm.collectionVariables.get('leadId');",
+              "var bucketId2 = pm.collectionVariables.get('bucketId2');",
+              "if (!leadId) {",
+              "    throw new Error('No lead ID available. Please run \"Get All Leads\" test first to capture a lead ID.');",
+              "}",
+              "if (!bucketId2) {",
+              "    throw new Error('No second bucket ID available. Please create a second bucket first.');",
+              "}",
+              "console.log('Changing bucket for lead ID:', leadId, 'to bucket:', bucketId2);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"lead_id\": \"{{leadId}}\",\n  \"new_bucket_id\": \"{{bucketId2}}\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:11000/api/main-service/leads/change-lead-bucket",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "11000",
+          "path": [
+            "api",
+            "main-service",
+            "leads",
+            "change-lead-bucket"
+          ]
+        },
+        "description": "Changes a lead from one bucket to another. Requires both leadId and bucketId2 collection variables to be set."
+      },
+      "response": []
     }
   ],
   "variable": [
@@ -477,6 +551,12 @@
       "value": "",
       "type": "string",
       "description": "Dynamically set by the 'Get All Leads' test - stores a lead ID for use in update tests"
+    },
+    {
+      "key": "bucketId2",
+      "value": "",
+      "type": "string",
+      "description": "Second bucket ID for testing bucket change functionality - should be set manually or by creating a second bucket"
     }
   ]
 }
